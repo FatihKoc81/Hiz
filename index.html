@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hız Aşımı Sayacı</title>
+<style>
+:root{--bg:#101214;--panel:#1a1d20;--line:#2a2e33;--text:#f1f2f3;--muted:#9aa1a8;--ok:#35c46a;--bad:#e5332a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh}
+body.alarm{animation:flash .6s steps(2) infinite}
+@keyframes flash{0%{background:var(--bg)}50%{background:#5a0f0b}}
+main{max-width:480px;margin:0 auto;padding:20px 18px 40px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px 18px}
+.speed{text-align:center}
+.speed .lbl{color:var(--muted);font-size:14px}
+.speed .num{font-size:104px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.speed .unit{font-size:22px;color:var(--muted);margin-left:6px}
+.timer{margin-top:14px;border-radius:14px;padding:18px 14px;text-align:center;background:#1f3a2a}
+.timer.over{background:#7a5a10}
+.timer.alarm{background:var(--bad)}
+.timer .t{font-size:46px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff}
+.timer .s{font-size:15px;color:#fff;margin-top:6px}
+.bar{height:8px;border-radius:99px;background:rgba(255,255,255,.2);margin-top:14px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#fff;transition:width .3s linear}
+.row{display:flex;gap:10px;margin-top:14px}
+button{font-size:17px;font-weight:600;border:0;border-radius:14px;padding:16px;cursor:pointer;flex:1;color:#fff;background:var(--ok);min-height:54px}
+button.stop,button.mute{background:#3a3f45}
+.status{margin-top:12px;font-size:14px;color:var(--muted);text-align:center;min-height:20px}
+.set{margin-top:14px;display:grid;gap:14px}
+.set label{display:flex;justify-content:space-between;align-items:center;font-size:15px;gap:12px}
+.set input[type=number]{width:90px;font-size:17px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);text-align:center}
+details{margin-top:16px}
+summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
+.test{display:grid;gap:8px;margin-top:8px;font-size:14px;color:var(--muted)}
+.test input[type=range]{width:100%}
+.note{font-size:13px;color:var(--muted);line-height:1.5;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Hız aşımı sayacı</h1>
+  <p class="sub">Hız sınırı üstünde kesintisiz geçen süreyi sayar, süre dolunca sesli uyarı verir.</p>
+
+  <section class="card speed">
+    <div class="lbl">Anlık GPS hızı</div>
+    <div><span class="num" id="speed">--</span><span class="unit">km/sa</span></div>
+    <div class="timer" id="timerBox">
+      <div class="t" id="timer">00:00 / 00:45</div>
+      <div class="s" id="timerSub">Hız sınırın altında</div>
+      <div class="bar"><i id="barFill"></i></div>
+    </div>
+    <div class="row">
+      <button id="startBtn">Takibi başlat</button>
+      <button id="muteBtn" class="mute" hidden>Alarmı sustur</button>
+    </div>
+    <div class="status" id="status">Başlamak için düğmeye bas ve konum iznini ver.</div>
+  </section>
+
+  <section class="card set">
+    <label>Hız sınırı (km/sa)
+      <input type="number" id="limit" inputmode="numeric" min="10" max="250" value="90">
+    </label>
+    <label>Uyarı süresi (saniye)
+      <input type="number" id="dur" inputmode="numeric" min="5" max="600" value="45">
+    </label>
+  </section>
+
+  <details>
+    <summary>Test modu (araçta olmadan dene)</summary>
+    <div class="test">
+      <label><input type="checkbox" id="simOn"> Sahte hız kullan</label>
+      <input type="range" id="simSpeed" min="0" max="140" value="95">
+      <div>Sahte hız: <b id="simVal">95</b> km/sa</div>
+    </div>
+  </details>
+
+  <p class="note">
+    Sınırın üstündeki hız algılanınca sayaç başlar. Hız sınıra eşit ya da altına düşerse sayaç sıfırlanır. Süre kesintisiz dolarsa yüksek sesli alarm, sesli uyarı ve titreşim devreye girer.<br><br>
+    Takip sırasında ekran açık tutulur. Ekran kapanırsa tarayıcı konumu durdurabilir.
+  </p>
+</main>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var speedEl=$('speed'),timerEl=$('timer'),subEl=$('timerSub'),box=$('timerBox'),bar=$('barFill');
+  var startBtn=$('startBtn'),muteBtn=$('muteBtn'),statusEl=$('status');
+  var limitEl=$('limit'),durEl=$('dur'),simOn=$('simOn'),simSpeed=$('simSpeed'),simVal=$('simVal');
+
+  try{
+    var s=JSON.parse(localStorage.getItem('hiz-ayar')||'null');
+    if(s){limitEl.value=s.limit||90;durEl.value=s.dur||45;}
+  }catch(e){}
+  function saveSettings(){
+    try{localStorage.setItem('hiz-ayar',JSON.stringify({limit:+limitEl.value,dur:+durEl.value}));}catch(e){}
+  }
+
+  var running=false,watchId=null,tick=null,wakeLock=null;
+  var speedKmh=null,overSince=null,alarmOn=false,muted=false,lastPos=null;
+  var audioCtx=null,sirenOsc=null,sirenGain=null,sirenTimer=null,speakTimer=null;
+
+  function limit(){return Math.max(10,+limitEl.value||90)}
+  function durV(){return Math.max(5,+durEl.value||45)}
+  function pad(n){return (n<10?'0':'')+n}
+  function fmt(sec){return pad(Math.floor(sec/60))+':'+pad(sec%60)}
+
+  function unlockAudio(){
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext;
+      if(!audioCtx)audioCtx=new AC();
+      if(audioCtx.state==='suspended')audioCtx.resume();
+    }catch(e){}
+    try{if('speechSynthesis' in window){var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u);}}catch(e){}
+  }
+  function startSiren(){
+    if(!audioCtx||sirenOsc)return;
+    try{
+      sirenOsc=audioCtx.createOscillator();
+      sirenGain=audioCtx.createGain();
+      sirenOsc.type='square';
+      sirenGain.gain.value=0.9;
+      sirenOsc.connect(sirenGain);sirenGain.connect(audioCtx.destination);
+      sirenOsc.start();
+      var hi=true;
+      function sw(){if(!sirenOsc)return;sirenOsc.frequency.setValueAtTime(hi?1200:800,audioCtx.currentTime);hi=!hi;}
+      sw();sirenTimer=setInterval(sw,350);
+    }catch(e){}
+  }
+  function stopSiren(){
+    try{if(sirenOsc){sirenOsc.stop();sirenOsc.disconnect();}}catch(e){}
+    sirenOsc=null;clearInterval(sirenTimer);sirenTimer=null;
+  }
+  function speak(){
+    try{
+      if(!('speechSynthesis' in window))return;
+      speechSynthesis.cancel();
+      var u=new SpeechSynthesisUtterance('Dikkat! Hız sınırını aştınız. Lütfen yavaşlayın.');
+      u.lang='tr-TR';u.volume=1;u.rate=1;
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  function vibrate(){try{if(navigator.vibrate)navigator.vibrate([500,200,500,200,500]);}catch(e){}}
+
+  function triggerAlarm(){
+    alarmOn=true;muted=false;
+    document.body.classList.add('alarm');
+    muteBtn.hidden=false;
+    startSiren();vibrate();
+    speakTimer=setInterval(function(){if(!muted){speak();vibrate();}},9000);
+    setTimeout(function(){if(alarmOn&&!muted)speak();},1200);
+  }
+  function clearAlarm(){
+    alarmOn=false;
+    document.body.classList.remove('alarm');
+    muteBtn.hidden=true;
+    stopSiren();clearInterval(speakTimer);speakTimer=null;
+    try{speechSynthesis.cancel();}catch(e){}
+    try{if(navigator.vibrate)navigator.vibrate(0);}catch(e){}
+  }
+  muteBtn.addEventListener('click',function(){
+    muted=true;stopSiren();
+    try{speechSynthesis.cancel()}catch(e){}
+    muteBtn.hidden=true;
+  });
+
+  function dist(a,b){
+    var R=6371000,r=Math.PI/180;
+    var dLat=(b.latitude-a.latitude)*r,dLon=(b.longitude-a.longitude)*r;
+    var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.latitude*r)*Math.cos(b.latitude*r)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return 2*R*Math.asin(Math.sqrt(x));
+  }
+  function onPos(p){
+    var v=p.coords.speed;
+    if(v==null||isNaN(v)){
+      if(lastPos){
+        var dt=(p.timestamp-lastPos.timestamp)/1000;
+        if(dt>0)v=dist(lastPos.coords,p.coords)/dt;
+      }
+    }
+    lastPos=p;
+    if(v!=null&&!isNaN(v))speedKmh=Math.max(0,v*3.6);
+    statusEl.textContent='GPS aktif'+(p.coords.accuracy?(' · doğruluk ±'+Math.round(p.coords.accuracy)+' m'):'');
+  }
+  function onErr(e){
+    var m={1:'Konum izni reddedildi. Tarayıcı ayarlarından izin ver.',2:'Konum alınamıyor. Açık alanda dene.',3:'Konum zaman aşımına uğradı.'};
+    statusEl.textContent=m[e.code]||'Konum hatası.';
+  }
+
+  async function lockScreen(){
+    try{
+      if('wakeLock' in navigator){
+        wakeLock=await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release',function(){wakeLock=null});
+      }
+    }catch(e){}
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(running&&document.visibilityState==='visible'&&!wakeLock)lockScreen();
+  });
+
+  function loop(){
+    var now=Date.now();
+    var cur=simOn.checked?+simSpeed.value:speedKmh;
+    var lim=limit(),total=durV();
+
+    speedEl.textContent=(cur==null)?'--':Math.round(cur);
+
+    if(cur!=null&&cur>lim){
+      if(overSince==null)overSince=now;
+    }else if(cur!=null){
+      if(overSince!=null||alarmOn){overSince=null;clearAlarm();}
+    }
+
+    var el=overSince?Math.floor((now-overSince)/1000):0;
+    var shown=Math.min(el,total);
+    timerEl.textContent=fmt(shown)+' / '+fmt(total);
+    bar.style.width=(overSince?Math.min(100,el/total*100):0)+'%';
+    box.classList.toggle('over',!!overSince&&el<total);
+    box.classList.toggle('alarm',!!overSince&&el>=total);
+
+    if(!overSince){
+      subEl.textContent=cur==null?'GPS hızı bekleniyor…':'Hız sınırın altında';
+    }else if(el<total){
+      subEl.textContent=(total-el)+' saniye sonra sesli uyarı';
+    }else{
+      subEl.textContent='Hız sınırı aşıldı! Yavaşla.';
+      if(!alarmOn)triggerAlarm();
+    }
+  }
+
+  function start(){
+    saveSettings();unlockAudio();
+    running=true;overSince=null;speedKmh=null;lastPos=null;
+    startBtn.textContent='Takibi durdur';startBtn.classList.add('stop');
+    if(!simOn.checked){
+      if(!('geolocation' in navigator)){statusEl.textContent='Bu cihaz konumu desteklemiyor.';}
+      else{
+        statusEl.textContent='GPS aranıyor…';
+        watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+      }
+    }else{statusEl.textContent='Test modu: sahte hız kullanılıyor.';}
+    lockScreen();
+    tick=setInterval(loop,250);loop();
+  }
+  function stop(){
+    running=false;
+    if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+    clearInterval(tick);tick=null;
+    clearAlarm();overSince=null;
+    try{if(wakeLock)wakeLock.release();}catch(e){}
+    startBtn.textContent='Takibi başlat';startBtn.classList.remove('stop');
+    statusEl.textContent='Takip durduruldu.';
+    speedEl.textContent='--';timerEl.textContent='00:00 / '+fmt(durV());
+    subEl.textContent='Hız sınırın altında';bar.style.width='0';
+    box.classList.remove('over','alarm');
+  }
+  startBtn.addEventListener('click',function(){running?stop():start();});
+  simSpeed.addEventListener('input',function(){simVal.textContent=simSpeed.value;});
+  simOn.addEventListener('change',function(){if(running){stop();start();}});
+  [limitEl,durEl].forEach(function(el){
+    el.addEventListener('change',function(){
+      saveSettings();
+      if(!running)timerEl.textContent='00:00 / '+fmt(durV());
+    });
+  });
+  timerEl.textContent='00:00 / '+fmt(durV());
+})();
+</script>
+</body>
+</html>
