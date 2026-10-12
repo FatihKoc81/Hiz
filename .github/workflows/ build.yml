@@ -15,7 +15,7 @@ jobs:
           gradle-version: '8.9'
       - name: Proje dosyalarini olustur
         run: |
-          mkdir -p app/src/main/java/com/hizuyari
+          mkdir -p app/src/main/java/com/hizuyari && sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick && mkdir -p app/src/main/res/mipmap-anydpi-v26 app/src/main/res/mipmap-xxxhdpi app/src/main/res/values && curl -sL https://raw.githubusercontent.com/FatihKoc81/Hiz/main/FK-ikon-512.png -o logo.png && IM=$(command -v magick || command -v convert) && $IM logo.png -resize 240x240 -background none -gravity center -extent 432x432 app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png && printf '<resources><color name="ic_launcher_background">#0F1B2D</color></resources>' > app/src/main/res/values/ic_launcher_background.xml && printf '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/ic_launcher_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
               repositories {
@@ -84,7 +84,7 @@ jobs:
 
               <application
                   android:allowBackup="false"
-                  android:label="Hız Uyarı"
+                  android:label="Hız Uyarı"  android:icon="@mipmap/ic_launcher"
                   android:theme="@android:style/Theme.Material.NoActionBar">
 
                   <activity
