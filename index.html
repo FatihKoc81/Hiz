@@ -5,38 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Hız Aşımı Sayacı</title>
 <style>
-:root{--bg:#101214;--panel:#1a1d20;--line:#2a2e33;--text:#f1f2f3;--muted:#9aa1a8;--ok:#35c46a;--bad:#e5332a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{--bg:#0b1424;--panel:#13213a;--line:#25406b;--text:#f1f5fb;--muted:#9fb0c9;--ok:#2fbf6a;--blue:#3b82f6;--blue2:#2563eb;--bad:#e5332a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 *,*::before,*::after{box-sizing:inherit}
 html,body{margin:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh}
 body.alarm{animation:flash .6s steps(2) infinite}
 @keyframes flash{0%{background:var(--bg)}50%{background:#5a0f0b}}
 main{max-width:480px;margin:0 auto;padding:20px 18px 40px}
-h1{font-size:20px;margin:0 0 4px}
+h1{font-size:22px;margin:0 0 4px;color:#8ab8ff}
 .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:20px 18px}
 .speed{text-align:center}
 .speed .lbl{color:var(--muted);font-size:14px}
 .speed .num{font-size:104px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
-.speed .unit{font-size:22px;color:var(--muted);margin-left:6px}
-.timer{margin-top:14px;border-radius:14px;padding:18px 14px;text-align:center;background:#1f3a2a}
+.speed .unit{display:block;text-align:center;font-size:22px;color:#8ab8ff;margin-top:2px}
+.timer{margin-top:14px;border-radius:18px;padding:18px 8px;text-align:center;background:#1b3a63}
 .timer.over{background:#7a5a10}
 .timer.alarm{background:var(--bad)}
-.timer .t{font-size:46px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff}
+.timer .t{font-size:clamp(30px,10.5vw,46px);white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;color:#fff}
 .timer .s{font-size:15px;color:#fff;margin-top:6px}
 .bar{height:8px;border-radius:99px;background:rgba(255,255,255,.2);margin-top:14px;overflow:hidden}
-.bar i{display:block;height:100%;width:0;background:#fff;transition:width .3s linear}
+.bar i{display:block;height:100%;width:0;background:#fff;border-radius:99px;transition:width .3s linear}
 .row{display:flex;gap:10px;margin-top:14px}
-button{font-size:17px;font-weight:600;border:0;border-radius:14px;padding:16px;cursor:pointer;flex:1;color:#fff;background:var(--ok);min-height:54px}
-button.stop,button.mute{background:#3a3f45}
+button{font-size:17px;font-weight:600;border:0;border-radius:99px;padding:16px;cursor:pointer;flex:1;color:#fff;background:var(--ok);min-height:54px}
+button:active{transform:scale(.98)}
+button.stop,button.mute{background:#3a4a66}
+button.save{background:var(--blue2);margin-top:2px}
+button.save.done{background:var(--ok)}
 .status{margin-top:12px;font-size:14px;color:var(--muted);text-align:center;min-height:20px}
 .set{margin-top:14px;display:grid;gap:14px}
 .set label{display:flex;justify-content:space-between;align-items:center;font-size:15px;gap:12px}
-.set input[type=number]{width:90px;font-size:17px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);text-align:center}
+.set input[type=number]{width:96px;font-size:17px;padding:11px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--text);text-align:center}
+.set input[type=number]:focus{outline:2px solid var(--blue);border-color:var(--blue)}
 details{margin-top:16px}
-summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
+summary{cursor:pointer;color:#8ab8ff;font-size:14px;padding:6px 0}
 .test{display:grid;gap:8px;margin-top:8px;font-size:14px;color:var(--muted)}
-.test input[type=range]{width:100%}
+.test input[type=range]{width:100%;accent-color:var(--blue)}
+.test input[type=checkbox]{accent-color:var(--blue)}
 .note{font-size:13px;color:var(--muted);line-height:1.5;margin-top:16px}
 </style>
 </head>
@@ -67,6 +72,7 @@ summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
     <label>Uyarı süresi (saniye)
       <input type="number" id="dur" inputmode="numeric" min="5" max="600" value="45">
     </label>
+    <button id="saveBtn" class="save">Kaydet</button>
   </section>
 
   <details>
@@ -88,7 +94,7 @@ summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
 (function(){
   var $=function(id){return document.getElementById(id)};
   var speedEl=$('speed'),timerEl=$('timer'),subEl=$('timerSub'),box=$('timerBox'),bar=$('barFill');
-  var startBtn=$('startBtn'),muteBtn=$('muteBtn'),statusEl=$('status');
+  var startBtn=$('startBtn'),muteBtn=$('muteBtn'),statusEl=$('status'),saveBtn=$('saveBtn');
   var limitEl=$('limit'),durEl=$('dur'),simOn=$('simOn'),simSpeed=$('simSpeed'),simVal=$('simVal');
 
   try{
@@ -96,10 +102,12 @@ summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
     if(s){limitEl.value=s.limit||90;durEl.value=s.dur||45;}
   }catch(e){}
   function saveSettings(){
+    limitEl.value=Math.min(250,Math.max(10,+limitEl.value||90));
+    durEl.value=Math.min(600,Math.max(5,+durEl.value||45));
     try{localStorage.setItem('hiz-ayar',JSON.stringify({limit:+limitEl.value,dur:+durEl.value}));}catch(e){}
   }
 
-  var running=false,watchId=null,tick=null,wakeLock=null;
+  var running=false,watchId=null,tick=null,wakeLock=null,saveTimer=null;
   var speedKmh=null,overSince=null,alarmOn=false,muted=false,lastPos=null;
   var audioCtx=null,sirenOsc=null,sirenGain=null,sirenTimer=null,speakTimer=null;
 
@@ -107,6 +115,14 @@ summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
   function durV(){return Math.max(5,+durEl.value||45)}
   function pad(n){return (n<10?'0':'')+n}
   function fmt(sec){return pad(Math.floor(sec/60))+':'+pad(sec%60)}
+
+  saveBtn.addEventListener('click',function(){
+    saveSettings();
+    if(!running)timerEl.textContent='00:00 / '+fmt(durV());
+    saveBtn.textContent='Kaydedildi ✓';saveBtn.classList.add('done');
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(function(){saveBtn.textContent='Kaydet';saveBtn.classList.remove('done');},2000);
+  });
 
   function unlockAudio(){
     try{
@@ -261,12 +277,6 @@ summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0}
   startBtn.addEventListener('click',function(){running?stop():start();});
   simSpeed.addEventListener('input',function(){simVal.textContent=simSpeed.value;});
   simOn.addEventListener('change',function(){if(running){stop();start();}});
-  [limitEl,durEl].forEach(function(el){
-    el.addEventListener('change',function(){
-      saveSettings();
-      if(!running)timerEl.textContent='00:00 / '+fmt(durV());
-    });
-  });
   timerEl.textContent='00:00 / '+fmt(durV());
 })();
 </script>
