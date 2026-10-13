@@ -1,22 +1,39 @@
-name: Uygulamayı derle
+name: APK derle
+
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-java@v4
+      - name: Kodu al
+        uses: actions/checkout@v4
+
+      - name: Java kur
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Gradle kur
+        uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
-      - name: Proje dosyalarini olustur
+          gradle-version: '8.7'
+
+      - name: Proje dosyalarını oluştur
         run: |
-          mkdir -p app/src/main/java/com/hizuyari && sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick && mkdir -p app/src/main/res/mipmap-anydpi-v26 app/src/main/res/mipmap-xxxhdpi app/src/main/res/values && curl -sL https://raw.githubusercontent.com/FatihKoc81/Hiz/main/FK-ikon-512.png -o logo.png && IM=$(command -v magick || command -v convert) && $IM logo.png -resize 240x240 -background none -gravity center -extent 432x432 app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png && printf '<resources><color name="ic_launcher_background">#0F1B2D</color></resources>' > app/src/main/res/values/ic_launcher_background.xml && printf '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/ic_launcher_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-          cat > settings.gradle.kts <<'EOF'
+          test -f index.html || { echo "index.html ana dizinde yok"; exit 1; }
+          mkdir -p app/src/main/assets app/src/main/java/com/fatih/hizasimi
+
+          cp index.html app/src/main/assets/index.html
+
+          cat > settings.gradle <<'EOF'
           pluginManagement {
               repositories {
                   google()
@@ -25,577 +42,163 @@ jobs:
               }
           }
           dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
               }
           }
-          rootProject.name = "HizUyari"
-          include(":app")
+          rootProject.name = "HizAsimi"
+          include ':app'
           EOF
-          cat > build.gradle.kts <<'EOF'
+
+          cat > build.gradle <<'EOF'
           plugins {
-              id("com.android.application") version "8.5.2" apply false
-              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+              id 'com.android.application' version '8.5.2' apply false
           }
           EOF
+
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2g
-          kotlin.code.style=official
+          android.useAndroidX=true
           EOF
-          cat > app/build.gradle.kts <<'EOF'
+
+          cat > app/build.gradle <<'EOF'
           plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
+              id 'com.android.application'
           }
-
           android {
-              namespace = "com.hizuyari"
-              compileSdk = 34
-
+              namespace 'com.fatih.hizasimi'
+              compileSdk 34
               defaultConfig {
-                  applicationId = "com.hizuyari"
-                  minSdk = 26
-                  targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  applicationId 'com.fatih.hizasimi'
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName '1.0'
               }
-
               compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
-
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
+          }
+          dependencies {
+              implementation 'androidx.webkit:webkit:1.11.0'
           }
           EOF
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
               <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
               <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-              <uses-permission android:name="android.permission.WAKE_LOCK" />
-
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.VIBRATE" />
               <application
-                  android:allowBackup="false"
-                  android:label="Hız Uyarı"  android:icon="@mipmap/ic_launcher"
-                  android:theme="@android:style/Theme.Material.NoActionBar">
-
+                  android:label="Hız aşımı sayacı"
+                  android:allowBackup="true"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
                   <activity
                       android:name=".MainActivity"
-                      android:exported="true">
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
-
-                  <service
-                      android:name=".SpeedService"
-                      android:exported="false"
-                      android:foregroundServiceType="location" />
               </application>
           </manifest>
           EOF
-          cat > app/src/main/java/com/hizuyari/SpeedService.kt <<'EOF'
-          package com.hizuyari
 
-          import android.app.Notification
-          import android.app.NotificationChannel
-          import android.app.NotificationManager
-          import android.app.PendingIntent
-          import android.app.Service
-          import android.content.Context
-          import android.content.Intent
-          import android.content.pm.ServiceInfo
-          import android.location.Location
-          import android.location.LocationListener
-          import android.location.LocationManager
-          import android.media.AudioManager
-          import android.media.ToneGenerator
-          import android.os.Build
-          import android.os.Bundle
-          import android.os.Handler
-          import android.os.IBinder
-          import android.os.Looper
-          import android.os.PowerManager
-          import android.os.SystemClock
-          import android.speech.tts.TextToSpeech
-          import java.util.Locale
+          cat > app/src/main/java/com/fatih/hizasimi/MainActivity.java <<'EOF'
+          package com.fatih.hizasimi;
 
-          class SpeedService : Service(), LocationListener, TextToSpeech.OnInitListener {
+          import android.Manifest;
+          import android.app.Activity;
+          import android.content.pm.PackageManager;
+          import android.graphics.Color;
+          import android.os.Bundle;
+          import android.view.WindowManager;
+          import android.webkit.GeolocationPermissions;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceResponse;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import androidx.webkit.WebViewAssetLoader;
 
-              companion object {
-                  @Volatile var running = false
-                  @Volatile var speedKmh = -1.0
-                  @Volatile var elapsed = 0.0
-                  @Volatile var status = "Takip kapalı"
-                  @Volatile var level = 0
-                  @Volatile var testMode = false
-                  @Volatile var testSpeed = 0
-                  const val CHANNEL = "hiz_takip"
+          public class MainActivity extends Activity {
+              private static final String APP_URL =
+                  "https://appassets.androidplatform.net/assets/index.html";
+              private WebView web;
+
+              private boolean hasLocation() {
+                  return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                      == PackageManager.PERMISSION_GRANTED;
               }
 
-              private val handler = Handler(Looper.getMainLooper())
-              private var lm: LocationManager? = null
-              private var wl: PowerManager.WakeLock? = null
-              private var tts: TextToSpeech? = null
-              private var ttsReady = false
-              private var tone: ToneGenerator? = null
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-              private var gpsKmh = -1.0
-              private var lastFix = 0L
-              private var prev: Location? = null
-              private var gpsOff = false
-              private var overStart = 0L
-              private var lastAlarm = 0L
+                  web = new WebView(this);
+                  web.setBackgroundColor(Color.parseColor("#050A24"));
+                  setContentView(web);
 
-              private val ticker = object : Runnable {
-                  override fun run() {
-                      tick()
-                      handler.postDelayed(this, 500)
-                  }
-              }
+                  final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
+                      .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                      .build();
 
-              override fun onBind(intent: Intent?): IBinder? = null
+                  WebSettings s = web.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setGeolocationEnabled(true);
+                  s.setMediaPlaybackRequiresUserGesture(false);
 
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  if (running) return START_STICKY
-                  startForegroundCompat()
-                  running = true
-                  status = "GPS sinyali bekleniyor…"
-
-                  val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-                  wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "hizuyari:servis")
-                  wl?.acquire()
-
-                  tts = TextToSpeech(this, this)
-                  try {
-                      tone = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                  } catch (e: Exception) {
-                  }
-
-                  try {
-                      lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                      lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this)
-                  } catch (e: SecurityException) {
-                      status = "Konum izni yok"
-                      stopSelf()
-                      return START_NOT_STICKY
-                  }
-
-                  handler.post(ticker)
-                  return START_STICKY
-              }
-
-              private fun startForegroundCompat() {
-                  val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                  nm.createNotificationChannel(
-                      NotificationChannel(CHANNEL, "Hız takibi", NotificationManager.IMPORTANCE_LOW)
-                  )
-                  val pi = PendingIntent.getActivity(
-                      this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
-                  )
-                  val n = Notification.Builder(this, CHANNEL)
-                      .setContentTitle("Hız takibi açık")
-                      .setContentText("Hız aşımı sayacı arka planda çalışıyor")
-                      .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                      .setContentIntent(pi)
-                      .setOngoing(true)
-                      .build()
-                  if (Build.VERSION.SDK_INT >= 29) {
-                      startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-                  } else {
-                      startForeground(1, n)
-                  }
-              }
-
-              override fun onLocationChanged(location: Location) {
-                  var v = -1.0
-                  if (location.hasSpeed()) {
-                      v = location.speed * 3.6
-                  } else {
-                      val p = prev
-                      if (p != null) {
-                          val dt = (location.time - p.time) / 1000.0
-                          if (dt > 0.5) v = p.distanceTo(location) / dt * 3.6
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
+                          return loader.shouldInterceptRequest(r.getUrl());
                       }
-                  }
-                  prev = location
-                  if (v >= 0) {
-                      gpsKmh = v
-                      lastFix = SystemClock.elapsedRealtime()
-                  }
-              }
+                  });
 
-              override fun onProviderEnabled(provider: String) {
-                  gpsOff = false
-              }
-
-              override fun onProviderDisabled(provider: String) {
-                  gpsOff = true
-              }
-
-              override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
-              }
-
-              override fun onInit(status: Int) {
-                  if (status == TextToSpeech.SUCCESS) {
-                      tts?.setLanguage(Locale("tr", "TR"))
-                      ttsReady = true
-                  }
-              }
-
-              private fun tick() {
-                  val now = SystemClock.elapsedRealtime()
-                  val prefs = getSharedPreferences("ayar", Context.MODE_PRIVATE)
-                  val limit = prefs.getInt("limit", 90)
-                  val dur = prefs.getInt("dur", 45)
-
-                  val kmh: Double
-                  val fresh: Boolean
-                  if (testMode) {
-                      kmh = testSpeed.toDouble()
-                      fresh = true
-                  } else {
-                      kmh = gpsKmh
-                      fresh = lastFix != 0L && (now - lastFix) < 6000 && gpsKmh >= 0
-                  }
-
-                  if (!fresh) {
-                      overStart = 0L
-                      lastAlarm = 0L
-                      speedKmh = -1.0
-                      elapsed = 0.0
-                      level = 0
-                      status = if (gpsOff) "Konum servisi kapalı, aç" else "GPS sinyali bekleniyor…"
-                      return
-                  }
-
-                  speedKmh = kmh
-                  if (kmh > limit) {
-                      if (overStart == 0L) overStart = now
-                      elapsed = (now - overStart) / 1000.0
-                      if (elapsed >= dur) {
-                          level = 2
-                          status = "Süre doldu! Hızını düşür"
-                          if (lastAlarm == 0L || now - lastAlarm > 10000) {
-                              lastAlarm = now
-                              alarm()
-                          }
-                      } else {
-                          level = 1
-                          status = "Hız sınırın üstünde"
+                  web.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public void onGeolocationPermissionsShowPrompt(
+                              String origin, GeolocationPermissions.Callback callback) {
+                          callback.invoke(origin, hasLocation(), false);
                       }
-                  } else {
-                      overStart = 0L
-                      lastAlarm = 0L
-                      elapsed = 0.0
-                      level = 0
-                      status = "Hız sınırın altında"
-                  }
-              }
+                  });
 
-              private fun alarm() {
-                  try {
-                      tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1500)
-                  } catch (e: Exception) {
+                  if (!hasLocation()) {
+                      requestPermissions(new String[]{
+                          Manifest.permission.ACCESS_FINE_LOCATION,
+                          Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
                   }
-                  handler.postDelayed({ speak() }, 1700)
-              }
-
-              private fun speak() {
-                  if (!ttsReady) return
-                  val params = Bundle()
-                  params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_ALARM)
-                  tts?.speak("Hızınızı düşürün", TextToSpeech.QUEUE_FLUSH, params, "uyari")
-              }
-
-              override fun onDestroy() {
-                  handler.removeCallbacksAndMessages(null)
-                  try {
-                      lm?.removeUpdates(this)
-                  } catch (e: Exception) {
-                  }
-                  try {
-                      wl?.release()
-                  } catch (e: Exception) {
-                  }
-                  tts?.shutdown()
-                  tone?.release()
-                  running = false
-                  speedKmh = -1.0
-                  elapsed = 0.0
-                  level = 0
-                  status = "Takip kapalı"
-                  super.onDestroy()
+                  web.loadUrl(APP_URL);
               }
           }
           EOF
-          cat > app/src/main/java/com/hizuyari/MainActivity.kt <<'EOF'
-          package com.hizuyari
 
-          import android.Manifest
-          import android.app.Activity
-          import android.content.Intent
-          import android.content.pm.PackageManager
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.graphics.drawable.GradientDrawable
-          import android.os.Build
-          import android.os.Bundle
-          import android.os.Handler
-          import android.os.Looper
-          import android.text.InputType
-          import android.view.Gravity
-          import android.view.ViewGroup
-          import android.widget.Button
-          import android.widget.CheckBox
-          import android.widget.EditText
-          import android.widget.LinearLayout
-          import android.widget.ProgressBar
-          import android.widget.ScrollView
-          import android.widget.SeekBar
-          import android.widget.TextView
-          import android.widget.Toast
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon --stacktrace
 
-          class MainActivity : Activity() {
+      - name: APK adını düzenle
+        run: cp app/build/outputs/apk/debug/app-debug.apk hiz-asimi.apk
 
-              private val handler = Handler(Looper.getMainLooper())
-              private val boxBg = GradientDrawable()
+      - name: APK'yi yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiz-asimi-apk
+          path: hiz-asimi.apk
 
-              private lateinit var speedTv: TextView
-              private lateinit var timeTv: TextView
-              private lateinit var statusTv: TextView
-              private lateinit var bar: ProgressBar
-              private lateinit var btn: Button
-              private lateinit var limitEt: EditText
-              private lateinit var durEt: EditText
-              private lateinit var testCb: CheckBox
-              private lateinit var testSb: SeekBar
-              private lateinit var testTv: TextView
-
-              private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-
-              private fun full(top: Int = 0): LinearLayout.LayoutParams {
-                  val p = LinearLayout.LayoutParams(
-                      ViewGroup.LayoutParams.MATCH_PARENT,
-                      ViewGroup.LayoutParams.WRAP_CONTENT
-                  )
-                  p.topMargin = top
-                  return p
-              }
-
-              private fun label(s: String, size: Float, color: String = "#FFFFFF", bold: Boolean = false): TextView {
-                  val t = TextView(this)
-                  t.text = s
-                  t.textSize = size
-                  t.setTextColor(Color.parseColor(color))
-                  if (bold) t.setTypeface(t.typeface, Typeface.BOLD)
-                  return t
-              }
-
-              private fun numberField(value: Int): EditText {
-                  val e = EditText(this)
-                  e.inputType = InputType.TYPE_CLASS_NUMBER
-                  e.setText(value.toString())
-                  e.textSize = 22f
-                  e.setTextColor(Color.WHITE)
-                  e.setBackgroundColor(Color.parseColor("#111A22"))
-                  e.setPadding(dp(14), dp(12), dp(14), dp(12))
-                  return e
-              }
-
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  SpeedService.testMode = false
-                  val prefs = getSharedPreferences("ayar", MODE_PRIVATE)
-
-                  val root = LinearLayout(this)
-                  root.orientation = LinearLayout.VERTICAL
-                  root.setPadding(dp(20), dp(40), dp(20), dp(40))
-
-                  root.addView(label("Hız aşımı sayacı", 26f, bold = true), full())
-                  root.addView(label("Hız sınırı üstünde kesintisiz geçen süreyi sayar, süre dolunca sesli uyarı verir.", 15f, "#8D9AA5"), full(dp(4)))
-
-                  val l1 = label("Anlık GPS hızı", 16f, "#8D9AA5")
-                  l1.gravity = Gravity.CENTER
-                  root.addView(l1, full(dp(24)))
-
-                  speedTv = label("--", 80f, bold = true)
-                  speedTv.gravity = Gravity.CENTER
-                  root.addView(speedTv, full())
-
-                  val unit = label("km/sa", 20f, "#8D9AA5")
-                  unit.gravity = Gravity.CENTER
-                  root.addView(unit, full())
-
-                  val box = LinearLayout(this)
-                  box.orientation = LinearLayout.VERTICAL
-                  box.setPadding(dp(16), dp(20), dp(16), dp(20))
-                  boxBg.cornerRadius = dp(18).toFloat()
-                  boxBg.setColor(Color.parseColor("#04170A"))
-                  box.background = boxBg
-                  timeTv = label("00:00 / 00:45", 34f, bold = true)
-                  timeTv.gravity = Gravity.CENTER
-                  statusTv = label("Takip kapalı", 18f)
-                  statusTv.gravity = Gravity.CENTER
-                  bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
-                  bar.max = 1000
-                  box.addView(timeTv, full())
-                  box.addView(statusTv, full(dp(4)))
-                  box.addView(bar, full(dp(12)))
-                  root.addView(box, full(dp(12)))
-
-                  btn = Button(this)
-                  btn.text = "Takibi başlat"
-                  btn.textSize = 20f
-                  btn.setOnClickListener { onToggle() }
-                  root.addView(btn, full(dp(16)))
-
-                  root.addView(label("Hız sınırı (km/sa)", 18f), full(dp(24)))
-                  limitEt = numberField(prefs.getInt("limit", 90))
-                  root.addView(limitEt, full(dp(6)))
-
-                  root.addView(label("Uyarı süresi (saniye)", 18f), full(dp(16)))
-                  durEt = numberField(prefs.getInt("dur", 45))
-                  root.addView(durEt, full(dp(6)))
-
-                  testCb = CheckBox(this)
-                  testCb.text = "Test modu (GPS yerine kaydırıcı)"
-                  testCb.setTextColor(Color.WHITE)
-                  testCb.setOnCheckedChangeListener { _, c -> SpeedService.testMode = c }
-                  root.addView(testCb, full(dp(28)))
-
-                  testSb = SeekBar(this)
-                  testSb.max = 160
-                  testTv = label("0 km/sa", 18f)
-                  testTv.gravity = Gravity.CENTER
-                  testSb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                      override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                          SpeedService.testSpeed = p
-                          testTv.text = p.toString() + " km/sa"
-                      }
-
-                      override fun onStartTrackingTouch(s: SeekBar?) {}
-                      override fun onStopTrackingTouch(s: SeekBar?) {}
-                  })
-                  root.addView(testSb, full(dp(6)))
-                  root.addView(testTv, full())
-
-                  root.addView(
-                      label("Alarm sesi için telefonun alarm ses seviyesini yüksek tut.", 14f, "#8D9AA5"),
-                      full(dp(20))
-                  )
-
-                  val sv = ScrollView(this)
-                  sv.setBackgroundColor(Color.parseColor("#05080B"))
-                  sv.addView(root)
-                  setContentView(sv)
-              }
-
-              private fun onToggle() {
-                  if (SpeedService.running) {
-                      stopService(Intent(this, SpeedService::class.java))
-                  } else {
-                      save()
-                      ensurePermissionsThenStart()
-                  }
-              }
-
-              private fun ensurePermissionsThenStart() {
-                  val need = ArrayList<String>()
-                  if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                      need.add(Manifest.permission.ACCESS_FINE_LOCATION)
-                  }
-                  if (Build.VERSION.SDK_INT >= 33 &&
-                      checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                  ) {
-                      need.add(Manifest.permission.POST_NOTIFICATIONS)
-                  }
-                  if (need.isNotEmpty()) {
-                      requestPermissions(need.toTypedArray(), 1)
-                  } else {
-                      startTracking()
-                  }
-              }
-
-              override fun onRequestPermissionsResult(
-                  requestCode: Int,
-                  permissions: Array<out String>,
-                  grantResults: IntArray
-              ) {
-                  super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-                  if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                      startTracking()
-                  } else {
-                      Toast.makeText(this, "Konum izni gerekli. Hassas konuma izin ver.", Toast.LENGTH_LONG).show()
-                  }
-              }
-
-              private fun startTracking() {
-                  startForegroundService(Intent(this, SpeedService::class.java))
-              }
-
-              private fun save() {
-                  val limit = (limitEt.text.toString().toIntOrNull() ?: 90).coerceAtLeast(1)
-                  val dur = (durEt.text.toString().toIntOrNull() ?: 45).coerceAtLeast(1)
-                  getSharedPreferences("ayar", MODE_PRIVATE).edit()
-                      .putInt("limit", limit)
-                      .putInt("dur", dur)
-                      .apply()
-              }
-
-              private fun fmt(sec: Int): String {
-                  val m = sec / 60
-                  val s = sec % 60
-                  return (if (m < 10) "0" else "") + m + ":" + (if (s < 10) "0" else "") + s
-              }
-
-              private fun refresh() {
-                  val run = SpeedService.running
-                  btn.text = if (run) "Takibi durdur" else "Takibi başlat"
-                  val sp = SpeedService.speedKmh
-                  speedTv.text = if (run && sp >= 0) Math.round(sp).toString() else "--"
-                  val dur = (durEt.text.toString().toIntOrNull() ?: 45).coerceAtLeast(1)
-                  val el = if (run) SpeedService.elapsed else 0.0
-                  timeTv.text = fmt(el.toInt()) + " / " + fmt(dur)
-                  statusTv.text = if (run) SpeedService.status else "Takip kapalı"
-                  bar.progress = minOf(1000, (el / dur * 1000).toInt())
-                  val col = if (!run) "#04170A" else when (SpeedService.level) {
-                      2 -> "#3A0A08"
-                      1 -> "#2A1D02"
-                      else -> "#04170A"
-                  }
-                  boxBg.setColor(Color.parseColor(col))
-              }
-
-              private val poll = object : Runnable {
-                  override fun run() {
-                      refresh()
-                      handler.postDelayed(this, 400)
-                  }
-              }
-
-              override fun onResume() {
-                  super.onResume()
-                  handler.post(poll)
-              }
-
-              override fun onPause() {
-                  super.onPause()
-                  handler.removeCallbacks(poll)
-                  save()
-              }
-          }
-          EOF
-      - - name: Derle
+      - name: Releases sayfasına ekle
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/FatihKoc81/Hiz/main/MainActivity.kt -o app/src/main/java/com/hizuyari/MainActivity.kt
-          gradle assembleDebug --no-daemon --stacktrace
+          gh release create "apk-${{ github.run_number }}" hiz-asimi.apk \
+            --title "APK #${{ github.run_number }}" \
+            --notes "Otomatik derleme"
