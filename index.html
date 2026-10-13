@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050a24">
 <title>Hız Aşımı Sayacı</title>
+<script>
+window.addEventListener("error", function (e) {
+  var h = document.getElementById("hint");
+  if (h) h.textContent = "Hata: " + e.message + " (satır " + e.lineno + ")";
+});
+</script>
 <style>
   :root {
     --bg: #050a24;
@@ -83,6 +89,8 @@
   #sliderVal { text-align: center; font-size: 20px; font-weight: 700; margin-top: 6px; }
   .note { font-size: 14px; opacity: .8; margin: 10px 0 0; }
 
+  #ver { text-align: center; font-size: 12px; opacity: .6; padding: 6px 0 0; }
+
   @media (prefers-reduced-motion: reduce) { .timer.alarm { animation: none; } }
 </style>
 </head>
@@ -120,6 +128,8 @@
   </div>
 </details>
 
+<div id="ver">v20 · JS çalışmıyor</div>
+
 <script>
 (() => {
   const $ = id => document.getElementById(id);
@@ -127,6 +137,8 @@
   const toggle = $('toggle'), hint = $('hint');
   const limitIn = $('limit'), durIn = $('dur');
   const testMode = $('testMode'), slider = $('slider'), sliderVal = $('sliderVal');
+
+  $('ver').textContent = 'v20 · hazır';
 
   let limit = 90, duration = 45;
   let tracking = false, watchId = null, tick = null, wakeLock = null;
@@ -173,4 +185,114 @@
   function stopAlarm() {
     alarming = false;
     clearInterval(beepTimer); beepTimer = null;
-    if (navigator.vibra
+    if (navigator.vibrate) navigator.vibrate(0);
+  }
+
+  function render() {
+    const sp = currentSpeed();
+    speedEl.textContent = sp == null ? '--' : Math.round(sp);
+    box.className = 'timer center';
+
+    if (!tracking) {
+      timeEl.textContent = '00:00 / ' + fmt(duration);
+      statusEl.textContent = 'Takip kapalı';
+      return;
+    }
+    if (sp == null) {
+      timeEl.textContent = '00:00 / ' + fmt(duration);
+      statusEl.textContent = 'GPS sinyali bekleniyor…';
+      return;
+    }
+    if (overSince == null) {
+      timeEl.textContent = '00:00 / ' + fmt(duration);
+      statusEl.textContent = 'Hız sınırın altında';
+      return;
+    }
+    const elapsed = (Date.now() - overSince) / 1000;
+    timeEl.textContent = fmt(Math.min(elapsed, duration)) + ' / ' + fmt(duration);
+    if (elapsed >= duration) {
+      box.classList.add('alarm');
+      statusEl.textContent = 'Süre doldu! Yavaşla';
+      startAlarm();
+    } else {
+      box.classList.add('over');
+      statusEl.textContent = 'Hız sınırı aşıldı';
+    }
+  }
+
+  function update() {
+    const sp = currentSpeed();
+    if (tracking && sp != null && sp > limit) {
+      if (overSince == null) overSince = Date.now();
+    } else {
+      overSince = null; stopAlarm();
+    }
+    render();
+  }
+
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (tracking && document.visibilityState === 'visible') keepAwake();
+  });
+
+  function start() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+
+    tracking = true; overSince = null;
+    toggle.textContent = 'Takibi durdur'; toggle.classList.add('on');
+    hint.textContent = 'Takip açık. Ekranı açık tut.';
+    keepAwake();
+
+    if (!testMode.checked) {
+      if (!('geolocation' in navigator)) {
+        hint.textContent = 'Bu cihaz konum desteklemiyor.';
+      } else {
+        watchId = navigator.geolocation.watchPosition(
+          pos => {
+            gpsSpeed = pos.coords.speed == null ? null : pos.coords.speed * 3.6;
+            update();
+          },
+          err => {
+            hint.textContent = err.code === 1
+              ? 'Konum izni reddedildi. Tarayıcı ayarlarından izin ver.'
+              : 'Konum alınamadı. Açık alanda tekrar dene.';
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+        );
+      }
+    }
+    tick = setInterval(update, 250);
+    update();
+  }
+
+  function stop() {
+    tracking = false; overSince = null; gpsSpeed = null;
+    if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    watchId = null; clearInterval(tick); tick = null;
+    stopAlarm();
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    toggle.textContent = 'Takibi başlat'; toggle.classList.remove('on');
+    hint.textContent = 'Başlamak için düğmeye bas ve konum iznini ver.';
+    render();
+  }
+
+  toggle.addEventListener('click', () => tracking ? stop() : start());
+
+  slider.addEventListener('input', () => {
+    sliderVal.textContent = slider.value + ' km/sa';
+    update();
+  });
+  testMode.addEventListener('change', () => {
+    if (tracking) { stop(); start(); } else render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
