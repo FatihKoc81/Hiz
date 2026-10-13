@@ -29,9 +29,12 @@ jobs:
       - name: Proje dosyalarını oluştur
         run: |
           test -f index.html || { echo "index.html ana dizinde yok"; exit 1; }
+          test -f FK-ikon-512.png || { echo "FK-ikon-512.png ana dizinde yok"; exit 1; }
           mkdir -p app/src/main/assets app/src/main/java/com/fatih/hizasimi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
 
           cp index.html app/src/main/assets/index.html
+          cp FK-ikon-512.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -95,7 +98,8 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.VIBRATE" />
               <application
-                  android:label="Hız aşımı sayacı"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="Hız Aşımı Sayacı"
                   android:allowBackup="true"
                   android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
                   <activity
@@ -165,40 +169,4 @@ jobs:
                       }
                   });
 
-                  web.setWebChromeClient(new WebChromeClient() {
-                      @Override
-                      public void onGeolocationPermissionsShowPrompt(
-                              String origin, GeolocationPermissions.Callback callback) {
-                          callback.invoke(origin, hasLocation(), false);
-                      }
-                  });
-
-                  if (!hasLocation()) {
-                      requestPermissions(new String[]{
-                          Manifest.permission.ACCESS_FINE_LOCATION,
-                          Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
-                  }
-                  web.loadUrl(APP_URL);
-              }
-          }
-          EOF
-
-      - name: APK derle
-        run: gradle assembleDebug --no-daemon --stacktrace
-
-      - name: APK adını düzenle
-        run: cp app/build/outputs/apk/debug/app-debug.apk hiz-asimi.apk
-
-      - name: APK'yi yükle
-        uses: actions/upload-artifact@v4
-        with:
-          name: hiz-asimi-apk
-          path: hiz-asimi.apk
-
-      - name: Releases sayfasına ekle
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "apk-${{ github.run_number }}" hiz-asimi.apk \
-            --title "APK #${{ github.run_number }}" \
-            --notes "Otomatik derleme"
+                  web.setWebChromeClient(new WebChromeClien
