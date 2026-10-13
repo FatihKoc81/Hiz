@@ -31,31 +31,31 @@ class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val timerBg = GradientDrawable()
 
-    private val cBg = Color.parseColor("#0B1424")
-    private val cPanel = Color.parseColor("#13213A")
-    private val cLine = Color.parseColor("#25406B")
-    private val cText = Color.parseColor("#F1F5FB")
-    private val cMuted = Color.parseColor("#9FB0C8")
-    private val cBlueText = Color.parseColor("#8AB8FF")
-    private val cBlue = Color.parseColor("#2F6FE4")
-    private val cStop = Color.parseColor("#3A4A66")
-    private val cOk = Color.parseColor("#1F9D63")
-    private val cWarn = Color.parseColor("#7A5A10")
-    private val cBad = Color.parseColor("#C0392B")
-    private val cRun = Color.parseColor("#123B2C")
+    // Renkler – ikinci ekran görüntüsüne uygun
+    private val cBg = Color.parseColor("#0B0E14")
+    private val cPanel = Color.parseColor("#12161F")
+    private val cLine = Color.parseColor("#1E2430")
+    private val cText = Color.parseColor("#E8EAED")
+    private val cMuted = Color.parseColor("#8B93A0")
+    private val cBlueText = Color.parseColor("#60A5FA")
+    private val cOk = Color.parseColor("#22C55E")       // Yeşil buton
+    private val cStop = Color.parseColor("#3A3F45")
+    private val cWarn = Color.parseColor("#3D2E0A")
+    private val cBad = Color.parseColor("#4A1212")
+    private val cTimerBg = Color.parseColor("#0F1F2E")
 
     private lateinit var speedTv: TextView
     private lateinit var timeTv: TextView
     private lateinit var statusTv: TextView
     private lateinit var bar: ProgressBar
     private lateinit var btn: Button
-    private lateinit var saveBtn: Button
     private lateinit var limitEt: EditText
     private lateinit var durEt: EditText
     private lateinit var testCb: CheckBox
     private lateinit var testBox: LinearLayout
     private lateinit var testSb: SeekBar
     private lateinit var testTv: TextView
+    private lateinit var gpsStatusTv: TextView
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -106,7 +106,7 @@ class MainActivity : Activity() {
     private fun card(): LinearLayout {
         val c = LinearLayout(this)
         c.orientation = LinearLayout.VERTICAL
-        c.setPadding(dp(16), dp(16), dp(16), dp(16))
+        c.setPadding(dp(18), dp(18), dp(18), dp(18))
         c.background = shape(cPanel, dp(20), cLine)
         return c
     }
@@ -115,11 +115,15 @@ class MainActivity : Activity() {
         val e = EditText(this)
         e.inputType = InputType.TYPE_CLASS_NUMBER
         e.setText(value.toString())
-        e.textSize = 18f
+        e.textSize = 17f
+        e.setTypeface(e.typeface, Typeface.BOLD)
         e.setTextColor(cText)
         e.gravity = Gravity.CENTER
-        e.background = shape(cBg, dp(12), cLine)
-        e.setPadding(dp(10), dp(10), dp(10), dp(10))
+        e.background = shape(Color.parseColor("#0D1117"), dp(12), cLine)
+        e.setPadding(dp(12), dp(10), dp(12), dp(10))
+        e.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveSettings()
+        }
         return e
     }
 
@@ -128,11 +132,23 @@ class MainActivity : Activity() {
         r.orientation = LinearLayout.HORIZONTAL
         r.gravity = Gravity.CENTER_VERTICAL
         r.addView(
-            label(title, 16f),
+            label(title, 15f),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        r.addView(field, LinearLayout.LayoutParams(dp(96), ViewGroup.LayoutParams.WRAP_CONTENT))
+        r.addView(field, LinearLayout.LayoutParams(dp(90), ViewGroup.LayoutParams.WRAP_CONTENT))
         return r
+    }
+
+    private fun saveSettings() {
+        val prefs = getSharedPreferences("ayar", MODE_PRIVATE)
+        val limit = limitEt.text.toString().toIntOrNull() ?: 90
+        val dur = durEt.text.toString().toIntOrNull() ?: 45
+        prefs.edit()
+            .putInt("limit", limit.coerceIn(10, 250))
+            .putInt("dur", dur.coerceIn(5, 600))
+            .apply()
+        SpeedService.speedLimit = limit.coerceIn(10, 250)
+        SpeedService.alertDuration = dur.coerceIn(5, 600)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,72 +159,258 @@ class MainActivity : Activity() {
         window.statusBarColor = cBg
         window.navigationBarColor = cBg
 
+        val scroll = ScrollView(this)
+        scroll.setBackgroundColor(cBg)
+
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(18), dp(36), dp(18), dp(40))
+        root.setPadding(dp(16), dp(28), dp(16), dp(40))
 
-        root.addView(label("Hız Aşımı Sayacı", 24f, cBlueText, true), lp())
+        // Başlık
+        root.addView(label("Hız aşımı sayacı", 22f, cBlueText, true), lp())
         root.addView(
             label(
                 "Hız sınırı üstünde kesintisiz geçen süreyi sayar, süre dolunca sesli uyarı verir.",
                 14f, cMuted
             ),
-            lp(dp(4))
+            lp(dp(6))
         )
 
-        val speedCard = card()
-        val l1 = label("Anlık GPS hızı", 15f, cMuted)
+        // Ana kart (hız + timer + buton)
+        val mainCard = card()
+
+        val l1 = label("Anlık GPS hızı", 14f, cMuted)
         l1.gravity = Gravity.CENTER
-        speedCard.addView(l1, lp())
-        speedTv = label("--", 96f, cText, true)
+        mainCard.addView(l1, lp())
+
+        speedTv = label("--", 72f, cText, true)
         speedTv.gravity = Gravity.CENTER
         speedTv.setSingleLine(true)
-        speedCard.addView(speedTv, lp())
-        val unit = label("km/sa", 22f, cBlueText)
-        unit.gravity = Gravity.CENTER
-        speedCard.addView(unit, lp())
-        root.addView(speedCard, lp(dp(18)))
+        mainCard.addView(speedTv, lp())
 
+        val unit = label("km/sa", 18f, cMuted)
+        unit.gravity = Gravity.CENTER
+        mainCard.addView(unit, lp(dp(2)))
+
+        // Timer kutusu
         val timerBox = LinearLayout(this)
         timerBox.orientation = LinearLayout.VERTICAL
-        timerBox.setPadding(dp(16), dp(20), dp(16), dp(18))
-        timerBg.cornerRadius = dp(18).toFloat()
-        timerBg.setColor(cPanel)
+        timerBox.setPadding(dp(16), dp(18), dp(16), dp(16))
+        timerBg.cornerRadius = dp(16).toFloat()
+        timerBg.setColor(cTimerBg)
+        timerBg.setStroke(dp(1), Color.parseColor("#1A2E42"))
         timerBox.background = timerBg
-        timeTv = label("00:00 / 00:45", 34f, Color.WHITE, true)
+
+        timeTv = label("00:00 / 00:45", 40f, Color.WHITE, true)
         timeTv.gravity = Gravity.CENTER
         timeTv.setSingleLine(true)
-        statusTv = label("Takip kapalı", 16f, Color.WHITE)
+        timerBox.addView(timeTv, lp())
+
+        statusTv = label("Hız sınırın altında", 15f, Color.parseColor("#A0AEC0"))
         statusTv.gravity = Gravity.CENTER
+        timerBox.addView(statusTv, lp(dp(6)))
+
         bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
         bar.max = 1000
         bar.progressTintList = ColorStateList.valueOf(Color.WHITE)
-        bar.progressBackgroundTintList = ColorStateList.valueOf(Color.parseColor("#44FFFFFF"))
-        timerBox.addView(timeTv, lp())
-        timerBox.addView(statusTv, lp(dp(6)))
-        val barLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8))
+        bar.progressBackgroundTintList = ColorStateList.valueOf(Color.parseColor("#26FFFFFF"))
+        val barLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6))
         barLp.topMargin = dp(14)
         timerBox.addView(bar, barLp)
-        root.addView(timerBox, lp(dp(14)))
 
-        btn = pill("Takibi başlat", cBlue)
+        mainCard.addView(timerBox, lp(dp(16)))
+
+        // Yeşil buton
+        btn = pill("Takibi başlat", cOk)
         btn.setOnClickListener { onToggle() }
-        root.addView(btn, lp(dp(16)))
+        mainCard.addView(btn, lp(dp(16)))
 
-        saveBtn = pill("Kaydet", cBlue)
-        saveBtn.setOnClickListener { onSave() }
-        root.addView(saveBtn, lp(dp(10)))
+        // GPS durum yazısı
+        gpsStatusTv = label("Başlamak için düğmeye bas ve konum iznini ver.", 13f, cMuted)
+        gpsStatusTv.gravity = Gravity.CENTER
+        mainCard.addView(gpsStatusTv, lp(dp(10)))
 
+        root.addView(mainCard, lp(dp(16)))
+
+        // Ayarlar kartı
         val setCard = card()
         limitEt = numberField(prefs.getInt("limit", 90))
         durEt = numberField(prefs.getInt("dur", 45))
         setCard.addView(settingRow("Hız sınırı (km/sa)", limitEt), lp())
-        setCard.addView(settingRow("Uyarı süresi (sn)", durEt), lp(dp(14)))
-        root.addView(setCard, lp(dp(18)))
+        setCard.addView(settingRow("Uyarı süresi (saniye)", durEt), lp(dp(14)))
+        root.addView(setCard, lp(dp(12)))
 
+        // Test modu
+        val testCard = card()
         testCb = CheckBox(this)
         testCb.text = "Test modu (GPS yerine kaydırıcı)"
-        testCb.setTextColor(cBlueText)
-        testCb.setOnCheckedChangeListener { _, c ->
-            SpeedService.testMode = c
-            test
+        testCb.setTextColor(cText)
+        testCb.setOnCheckedChangeListener { _, checked ->
+            SpeedService.testMode = checked
+            testBox.visibility = if (checked) View.VISIBLE else View.GONE
+            if (SpeedService.running) {
+                // Yeniden başlat
+                stopTracking()
+                startTracking()
+            }
+        }
+        testCard.addView(testCb, lp())
+
+        testBox = LinearLayout(this)
+        testBox.orientation = LinearLayout.VERTICAL
+        testBox.visibility = View.GONE
+
+        testTv = label("Sahte hız: 95 km/sa", 14f, cMuted)
+        testBox.addView(testTv, lp(dp(8)))
+
+        testSb = SeekBar(this)
+        testSb.max = 160
+        testSb.progress = 95
+        testSb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                testTv.text = "Sahte hız: $progress km/sa"
+                if (SpeedService.testMode) {
+                    SpeedService.fakeSpeed = progress.toFloat()
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        testBox.addView(testSb, lp(dp(4)))
+        testCard.addView(testBox, lp())
+
+        root.addView(testCard, lp(dp(12)))
+
+        // Not
+        val note = label(
+            "Sınırın üstündeki hız algılanınca sayaç başlar. Hız sınıra eşit ya da altına düşerse sayaç sıfırlanır. Süre kesintisiz dolarsa yüksek sesli alarm ve titreşim devreye girer.\n\nTakip sırasında ekran açık tutulur.",
+            13f, cMuted
+        )
+        root.addView(note, lp(dp(16)))
+
+        scroll.addView(root)
+        setContentView(scroll)
+
+        // Servis değerlerini yükle
+        SpeedService.speedLimit = prefs.getInt("limit", 90)
+        SpeedService.alertDuration = prefs.getInt("dur", 45)
+
+        // UI güncelleme döngüsü
+        startUiLoop()
+    }
+
+    private fun startUiLoop() {
+        handler.post(object : Runnable {
+            override fun run() {
+                updateUi()
+                handler.postDelayed(this, 250)
+            }
+        })
+    }
+
+    private fun updateUi() {
+        val speed = if (SpeedService.testMode) SpeedService.fakeSpeed else SpeedService.currentSpeed
+        speedTv.text = if (speed < 0) "--" else speed.toInt().toString()
+
+        val limit = limitEt.text.toString().toIntOrNull() ?: 90
+        val total = durEt.text.toString().toIntOrNull() ?: 45
+        val elapsed = SpeedService.overspeedSeconds
+
+        timeTv.text = String.format("%02d:%02d / %02d:%02d",
+            elapsed / 60, elapsed % 60, total / 60, total % 60)
+
+        bar.progress = if (total > 0) ((elapsed.toFloat() / total) * 1000).toInt().coerceIn(0, 1000) else 0
+
+        if (!SpeedService.running) {
+            statusTv.text = "Hız sınırın altında"
+            statusTv.setTextColor(Color.parseColor("#A0AEC0"))
+            timerBg.setColor(cTimerBg)
+            gpsStatusTv.text = "Takip durduruldu."
+            paint(btn, cOk)
+            btn.text = "Takibi başlat"
+        } else {
+            paint(btn, cStop)
+            btn.text = "Takibi durdur"
+
+            if (speed > limit) {
+                if (elapsed >= total) {
+                    statusTv.text = "Hız sınırı aşıldı! Yavaşla."
+                    statusTv.setTextColor(Color.WHITE)
+                    timerBg.setColor(cBad)
+                } else {
+                    statusTv.text = "${total - elapsed} saniye sonra sesli uyarı"
+                    statusTv.setTextColor(Color.WHITE)
+                    timerBg.setColor(cWarn)
+                }
+            } else {
+                statusTv.text = "Hız sınırın altında"
+                statusTv.setTextColor(Color.parseColor("#A0AEC0"))
+                timerBg.setColor(cTimerBg)
+            }
+
+            if (SpeedService.testMode) {
+                gpsStatusTv.text = "Test modu: sahte hız kullanılıyor."
+            } else {
+                gpsStatusTv.text = SpeedService.gpsStatus
+            }
+        }
+    }
+
+    private fun onToggle() {
+        if (SpeedService.running) {
+            stopTracking()
+        } else {
+            startTracking()
+        }
+    }
+
+    private fun startTracking() {
+        saveSettings()
+
+        if (!SpeedService.testMode) {
+            if (Build.VERSION.SDK_INT >= 23 &&
+                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
+                return
+            }
+        }
+
+        SpeedService.running = true
+        SpeedService.overspeedSeconds = 0
+        SpeedService.fakeSpeed = testSb.progress.toFloat()
+
+        val intent = Intent(this, SpeedService::class.java)
+        if (Build.VERSION.SDK_INT >= 26) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        updateUi()
+    }
+
+    private fun stopTracking() {
+        SpeedService.running = false
+        stopService(Intent(this, SpeedService::class.java))
+        updateUi()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (requestCode == 1001 && grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            startTracking()
+        } else {
+            Toast.makeText(this, "Konum izni gerekli", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+}
