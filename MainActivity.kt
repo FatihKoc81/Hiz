@@ -121,9 +121,6 @@ class MainActivity : Activity() {
         e.gravity = Gravity.CENTER
         e.background = shape(Color.parseColor("#0D1117"), dp(12), cLine)
         e.setPadding(dp(12), dp(10), dp(12), dp(10))
-        e.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) saveSettings()
-        }
         return e
     }
 
@@ -133,34 +130,4 @@ class MainActivity : Activity() {
         r.gravity = Gravity.CENTER_VERTICAL
         r.addView(
             label(title, 15f),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        r.addView(field, LinearLayout.LayoutParams(dp(90), ViewGroup.LayoutParams.WRAP_CONTENT))
-        return r
-    }
-
-    private fun saveSettings() {
-        val prefs = getSharedPreferences("ayar", MODE_PRIVATE)
-        val limit = limitEt.text.toString().toIntOrNull() ?: 90
-        val dur = durEt.text.toString().toIntOrNull() ?: 45
-        prefs.edit()
-            .putInt("limit", limit.coerceIn(10, 250))
-            .putInt("dur", dur.coerceIn(5, 600))
-            .apply()
-        SpeedService.speedLimit = limit.coerceIn(10, 250)
-        SpeedService.alertDuration = dur.coerceIn(5, 600)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        SpeedService.testMode = false
-        val prefs = getSharedPreferences("ayar", MODE_PRIVATE)
-
-        window.statusBarColor = cBg
-        window.navigationBarColor = cBg
-
-        val scroll = ScrollView(this)
-        scroll.setBackgroundColor(cBg)
-
-        val root = LinearLayout(this)
-        root.orientation = Linear
+            LinearLayout.LayoutParams(0, View
