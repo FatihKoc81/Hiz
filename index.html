@@ -1,39 +1,283 @@
-name: APK derle
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a24">
+<title>Hız Aşımı Sayacı</title>
+<style>
+  :root {
+    --bg: #050a24;
+    --card: #0a1038;
+    --card-line: #2a4a8f;
+    --timer-bg: #11197a;
+    --text: #ffffff;
+    --accent: #5fb3ff;
+    --green: #2fbd1f;
+    --blue: #1f63e0;
+    --red: #e0301f;
+    --input-bg: #070c2b;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  h1 { margin: 4px 0 12px; font-size: 26px; font-weight: 800; color: var(--accent); }
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  .card {
+    background: var(--card);
+    border: 1.5px solid var(--card-line);
+    border-radius: 24px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .center { text-align: center; }
+  .label { font-size: 14px; }
+  #speed { font-size: 72px; font-weight: 800; line-height: 1.1; margin: 8px 0 0; }
+  .unit { font-size: 22px; color: var(--accent); margin-bottom: 10px; }
 
-permissions:
-  contents: write
+  .timer {
+    background: var(--timer-bg);
+    border-radius: 20px;
+    padding: 14px 6px 14px;
+    transition: background .25s;
+  }
+  .timer.over { background: #8a5a00; }
+  .timer.alarm { background: var(--red); animation: pulse .6s infinite alternate; }
+  @keyframes pulse { to { background: #7a0f05; } }
+  #time { font-size: clamp(26px, 8.5vw, 42px); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #status { margin-top: 4px; font-size: 17px; font-weight: 500; }
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Kodu al
-        uses: actions/checkout@v4
+  button {
+    font: inherit; color: #fff; border: 0; width: 100%;
+    border-radius: 999px; padding: 15px; font-size: 19px; font-weight: 700;
+    cursor: pointer;
+  }
+  button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #toggle { background: var(--green); margin-top: 12px; }
+  #toggle.on { background: var(--red); }
+  #save { background: var(--blue); margin-top: 2px; }
+  .hint { margin: 10px 4px 0; text-align: center; font-size: 14px; }
 
-      - name: Java kur
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 16px; font-weight: 500; }
+  .row input {
+    width: 100px; text-align: center; font: inherit; font-size: 19px; font-weight: 500; color: #fff;
+    background: var(--input-bg); border: 1.5px solid var(--card-line); border-radius: 16px; padding: 11px 8px;
+  }
 
-      - name: Gradle kur
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
+  details { padding: 4px 6px; }
+  summary { cursor: pointer; font-size: 16px; padding: 8px 0; }
+  .test { padding: 8px 0 4px; }
+  .test label { display: flex; align-items: center; gap: 10px; font-size: 16px; margin-bottom: 14px; }
+  .test input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+  .test input[type=range] { width: 100%; accent-color: var(--accent); }
+  #sliderVal { text-align: center; font-size: 20px; font-weight: 700; margin-top: 6px; }
+  .note { font-size: 14px; opacity: .8; margin: 10px 0 0; }
 
-      - name: Proje dosyalarını oluştur
-        run: |
-          test -f index.html || { echo "index.html ana dizinde yok"; exit 1; }
-          test -f FK-ikon-512.png || { echo "FK-ikon-512.png ana dizinde yok"; exit 1; }
-          mkdir -p app/src/main/assets app/src/main/java/com/fatih/hizasimi
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
+  @media (prefers-reduced-motion: reduce) { .timer.alarm { animation: none; } }
+</style>
+</head>
+<body>
 
-          cp index.html app/src/main/assets/index.html
-          cp FK-ikon-512.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+<h1>Hız Aşımı Sayacı</h1>
 
-          cat > settings.gradle <
+<section class="card">
+  <div class="center label">Anlık GPS hızı</div>
+  <div class="center" id="speed">--</div>
+  <div class="center unit">km/sa</div>
+
+  <div class="timer center" id="timerBox">
+    <div id="time">00:00 / 00:45</div>
+    <div id="status">Takip kapalı</div>
+  </div>
+
+  <button id="toggle" type="button">Takibi başlat</button>
+  <p class="hint" id="hint">Başlamak için düğmeye bas ve konum iznini ver.</p>
+</section>
+
+<section class="card">
+  <div class="row"><label for="limit">Hız sınırı (km/sa)</label><input id="limit" type="number" inputmode="numeric" min="1" max="300" value="90"></div>
+  <div class="row"><label for="dur">Uyarı süresi (saniye)</label><input id="dur" type="number" inputmode="numeric" min="1" max="3600" value="45"></div>
+  <button id="save" type="button">Kaydet</button>
+</section>
+
+<details class="card">
+  <summary>Test modu (araçta olmadan dene)</summary>
+  <div class="test">
+    <label><input type="checkbox" id="testMode"> Test modu (GPS yerine kaydırıcı)</label>
+    <input type="range" id="slider" min="0" max="200" value="0" aria-label="Test hızı">
+    <div id="sliderVal">0 km/sa</div>
+    <p class="note">Alarm sesi için telefonun medya/alarm ses seviyesini yüksek tut.</p>
+  </div>
+</details>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const speedEl = $('speed'), timeEl = $('time'), statusEl = $('status'), box = $('timerBox');
+  const toggle = $('toggle'), hint = $('hint');
+  const limitIn = $('limit'), durIn = $('dur');
+  const testMode = $('testMode'), slider = $('slider'), sliderVal = $('sliderVal');
+
+  let limit = 90, duration = 45;
+  let tracking = false, watchId = null, tick = null, wakeLock = null;
+  let gpsSpeed = null;
+  let overSince = null;
+  let alarming = false, audioCtx = null, beepTimer = null;
+
+  try {
+    const s = JSON.parse(localStorage.getItem('hizAsimi') || '{}');
+    if (s.limit) limit = s.limit;
+    if (s.duration) duration = s.duration;
+  } catch (e) {}
+  limitIn.value = limit; durIn.value = duration;
+
+  $('save').addEventListener('click', () => {
+    const l = parseInt(limitIn.value, 10), d = parseInt(durIn.value, 10);
+    if (!(l > 0) || !(d > 0)) { alert('Hız sınırı ve süre sıfırdan büyük olmalı.'); return; }
+    limit = l; duration = d;
+    try { localStorage.setItem('hizAsimi', JSON.stringify({ limit, duration })); } catch (e) {}
+    overSince = null; stopAlarm(); render();
+    $('save').textContent = 'Kaydedildi ✓';
+    setTimeout(() => $('save').textContent = 'Kaydet', 1500);
+  });
+
+  const fmt = s => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  const currentSpeed = () => testMode.checked ? Number(slider.value) : gpsSpeed;
+
+  function beepOnce() {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'square'; o.frequency.value = 1000;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.6, audioCtx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.4);
+    if (navigator.vibrate) navigator.vibrate(300);
+  }
+  function startAlarm() {
+    if (alarming) return;
+    alarming = true; beepOnce();
+    beepTimer = setInterval(beepOnce, 700);
+  }
+  function stopAlarm() {
+    alarming = false;
+    clearInterval(beepTimer); beepTimer = null;
+    if (navigator.vibrate) navigator.vibrate(0);
+  }
+
+  function render() {
+    const sp = currentSpeed();
+    speedEl.textContent = sp == null ? '--' : Math.round(sp);
+    box.className = 'timer center';
+
+    if (!tracking) {
+      timeEl.textContent = '00:00 / ' + fmt(duration);
+      statusEl.textContent = 'Takip kapalı';
+      return;
+    }
+    if (sp == null) {
+      timeEl.textContent = '00:00 / ' + fmt(duration);
+      statusEl.textContent = 'GPS sinyali bekleniyor…';
+      return;
+    }
+    if (overSince == null) {
+      timeEl.textContent = '00:00 / ' + fmt(duration);
+      statusEl.textContent = 'Hız sınırın altında';
+      return;
+    }
+    const elapsed = (Date.now() - overSince) / 1000;
+    timeEl.textContent = fmt(Math.min(elapsed, duration)) + ' / ' + fmt(duration);
+    if (elapsed >= duration) {
+      box.classList.add('alarm');
+      statusEl.textContent = 'Süre doldu! Yavaşla';
+      startAlarm();
+    } else {
+      box.classList.add('over');
+      statusEl.textContent = 'Hız sınırı aşıldı';
+    }
+  }
+
+  function update() {
+    const sp = currentSpeed();
+    if (tracking && sp != null && sp > limit) {
+      if (overSince == null) overSince = Date.now();
+    } else {
+      overSince = null; stopAlarm();
+    }
+    render();
+  }
+
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (tracking && document.visibilityState === 'visible') keepAwake();
+  });
+
+  function start() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+
+    tracking = true; overSince = null;
+    toggle.textContent = 'Takibi durdur'; toggle.classList.add('on');
+    hint.textContent = 'Takip açık. Ekranı açık tut.';
+    keepAwake();
+
+    if (!testMode.checked) {
+      if (!('geolocation' in navigator)) {
+        hint.textContent = 'Bu cihaz konum desteklemiyor.';
+      } else {
+        watchId = navigator.geolocation.watchPosition(
+          pos => {
+            gpsSpeed = pos.coords.speed == null ? null : pos.coords.speed * 3.6;
+            update();
+          },
+          err => {
+            hint.textContent = err.code === 1
+              ? 'Konum izni reddedildi. Tarayıcı ayarlarından izin ver.'
+              : 'Konum alınamadı. Açık alanda tekrar dene.';
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+        );
+      }
+    }
+    tick = setInterval(update, 250);
+    update();
+  }
+
+  function stop() {
+    tracking = false; overSince = null; gpsSpeed = null;
+    if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    watchId = null; clearInterval(tick); tick = null;
+    stopAlarm();
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    toggle.textContent = 'Takibi başlat'; toggle.classList.remove('on');
+    hint.textContent = 'Başlamak için düğmeye bas ve konum iznini ver.';
+    render();
+  }
+
+  toggle.addEventListener('click', () => tracking ? stop() : start());
+
+  slider.addEventListener('input', () => {
+    sliderVal.textContent = slider.value + ' km/sa';
+    update();
+  });
+  testMode.addEventListener('change', () => {
+    if (tracking) { stop(); start(); } else render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
