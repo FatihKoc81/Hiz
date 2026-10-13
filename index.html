@@ -35,7 +35,7 @@
     background: var(--card);
     border: 1.5px solid var(--card-line);
     border-radius: 26px;
-    padding: 20px;
+    padding: 16px;
     margin-bottom: 16px;
   }
   .center { text-align: center; }
@@ -46,13 +46,13 @@
   .timer {
     background: var(--timer-bg);
     border-radius: 22px;
-    padding: 22px 12px 20px;
+    padding: 22px 6px 20px;
     transition: background .25s;
   }
   .timer.over { background: #8a5a00; }
   .timer.alarm { background: var(--red); animation: pulse .6s infinite alternate; }
   @keyframes pulse { to { background: #7a0f05; } }
-  #time { font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #time { font-size: clamp(26px, 8.5vw, 44px); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
   #status { margin-top: 6px; font-size: 18px; font-weight: 500; }
 
   button {
@@ -129,11 +129,10 @@
 
   let limit = 90, duration = 45;
   let tracking = false, watchId = null, tick = null, wakeLock = null;
-  let gpsSpeed = null;          // km/sa
-  let overSince = null;         // hız sınırı aşılmaya başlanan zaman
+  let gpsSpeed = null;
+  let overSince = null;
   let alarming = false, audioCtx = null, beepTimer = null;
 
-  // ---- Ayarları yükle / kaydet ----
   try {
     const s = JSON.parse(localStorage.getItem('hizAsimi') || '{}');
     if (s.limit) limit = s.limit;
@@ -151,11 +150,9 @@
     setTimeout(() => $('save').textContent = 'Kaydet', 1500);
   });
 
-  // ---- Yardımcılar ----
   const fmt = s => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0');
   const currentSpeed = () => testMode.checked ? Number(slider.value) : gpsSpeed;
 
-  // ---- Ses ----
   function beepOnce() {
     if (!audioCtx) return;
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -178,7 +175,6 @@
     if (navigator.vibrate) navigator.vibrate(0);
   }
 
-  // ---- Ekranı güncelle ----
   function render() {
     const sp = currentSpeed();
     speedEl.textContent = sp == null ? '--' : Math.round(sp);
@@ -221,7 +217,6 @@
     render();
   }
 
-  // ---- Takip ----
   async function keepAwake() {
     try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
   }
@@ -230,7 +225,6 @@
   });
 
   function start() {
-    // Ses, kullanıcı dokunuşuyla açılmalı
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
