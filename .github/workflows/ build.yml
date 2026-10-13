@@ -31,12 +31,22 @@ jobs:
           test -f index.html || { echo "index.html ana dizinde yok"; exit 1; }
           test -f FK-ikon-512.png || { echo "FK-ikon-512.png ana dizinde yok"; exit 1; }
           mkdir -p app/src/main/assets app/src/main/java/com/fatih/hizasimi
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
 
           cp index.html app/src/main/assets/index.html
-          cp FK-ikon-512.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
-          cat > settings.gradle <<'EOF'
+          # Logo: her ekran yoğunluğu için ayrı boyut
+          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            name="${d%%:*}"; size="${d##*:}"
+            mkdir -p "app/src/main/res/mipmap-$name"
+            if command -v convert >/dev/null 2>&1; then
+              convert FK-ikon-512.png -resize "${size}x${size}" "app/src/main/res/mipmap-$name/ic_launcher.png"
+            else
+              cp FK-ikon-512.png "app/src/main/res/mipmap-$name/ic_launcher.png"
+            fi
+            cp "app/src/main/res/mipmap-$name/ic_launcher.png" "app/src/main/res/mipmap-$name/ic_launcher_round.png"
+          done
+
+          cat > settings.gradle <<'EOT'
           pluginManagement {
               repositories {
                   google()
@@ -53,20 +63,20 @@ jobs:
           }
           rootProject.name = "HizAsimi"
           include ':app'
-          EOF
+          EOT
 
-          cat > build.gradle <<'EOF'
+          cat > build.gradle <<'EOT'
           plugins {
               id 'com.android.application' version '8.5.2' apply false
           }
-          EOF
+          EOT
 
-          cat > gradle.properties <<'EOF'
+          cat > gradle.properties <<'EOT'
           org.gradle.jvmargs=-Xmx2g
           android.useAndroidX=true
-          EOF
+          EOT
 
-          cat > app/build.gradle <<'EOF'
+          cat > app/build.gradle <<'EOT'
           plugins {
               id 'com.android.application'
           }
@@ -88,9 +98,9 @@ jobs:
           dependencies {
               implementation 'androidx.webkit:webkit:1.11.0'
           }
-          EOF
+          EOT
 
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          cat > app/src/main/AndroidManifest.xml <<'EOT'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -99,6 +109,7 @@ jobs:
               <uses-permission android:name="android.permission.VIBRATE" />
               <application
                   android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
                   android:label="Hız Aşımı Sayacı"
                   android:allowBackup="true"
                   android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
@@ -113,9 +124,9 @@ jobs:
                   </activity>
               </application>
           </manifest>
-          EOF
+          EOT
 
-          cat > app/src/main/java/com/fatih/hizasimi/MainActivity.java <<'EOF'
+          cat > app/src/main/java/com/fatih/hizasimi/MainActivity.java <<'EOT'
           package com.fatih.hizasimi;
 
           import android.Manifest;
@@ -169,4 +180,40 @@ jobs:
                       }
                   });
 
-                  web.setWebChromeClient(new WebChromeClien
+                  web.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public void onGeolocationPermissionsShowPrompt(
+                              String origin, GeolocationPermissions.Callback callback) {
+                          callback.invoke(origin, hasLocation(), false);
+                      }
+                  });
+
+                  if (!hasLocation()) {
+                      requestPermissions(new String[]{
+                          Manifest.permission.ACCESS_FINE_LOCATION,
+                          Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
+                  }
+                  web.loadUrl(APP_URL);
+              }
+          }
+          EOT
+
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: APK adını düzenle
+        run: cp app/build/outputs/apk/debug/app-debug.apk hiz-asimi.apk
+
+      - name: APK'yi yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiz-asimi-apk
+          path: hiz-asimi.apk
+
+      - name: Releases sayfasına ekle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "apk-${{ github.run_number }}" hiz-asimi.apk \
+            --title "APK #${{ github.run_number }}" \
+            --notes "Otomatik derleme"
