@@ -24,11 +24,14 @@
   body {
     font-family: Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
     min-height: 100vh;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px));
     max-width: 520px;
     margin: 0 auto;
   }
-  h1 { margin: 4px 0 12px; font-size: 26px; font-weight: 800; color: var(--accent); }
+  h1 { margin: 4px 0 18px; font-size: 26px; font-weight: 800; color: var(--accent); }
 
   .card {
     background: var(--card);
@@ -63,7 +66,7 @@
   #toggle { background: var(--green); margin-top: 12px; }
   #toggle.on { background: var(--red); }
   #save { background: var(--blue); margin-top: 2px; }
-  .hint { margin: 10px 4px 0; text-align: center; font-size: 14px; }
+  .hint { margin: 10px 4px 12px; text-align: center; font-size: 14px; }
 
   .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 16px; font-weight: 500; }
   .row input {
@@ -71,7 +74,7 @@
     background: var(--input-bg); border: 1.5px solid var(--card-line); border-radius: 16px; padding: 11px 8px;
   }
 
-  details { padding: 4px 6px; }
+  details { padding: 4px 6px; margin-top: auto; margin-bottom: 0; }
   summary { cursor: pointer; font-size: 16px; padding: 8px 0; }
   .test { padding: 8px 0 4px; }
   .test label { display: flex; align-items: center; gap: 10px; font-size: 16px; margin-bottom: 14px; }
@@ -170,114 +173,4 @@
   function stopAlarm() {
     alarming = false;
     clearInterval(beepTimer); beepTimer = null;
-    if (navigator.vibrate) navigator.vibrate(0);
-  }
-
-  function render() {
-    const sp = currentSpeed();
-    speedEl.textContent = sp == null ? '--' : Math.round(sp);
-    box.className = 'timer center';
-
-    if (!tracking) {
-      timeEl.textContent = '00:00 / ' + fmt(duration);
-      statusEl.textContent = 'Takip kapalı';
-      return;
-    }
-    if (sp == null) {
-      timeEl.textContent = '00:00 / ' + fmt(duration);
-      statusEl.textContent = 'GPS sinyali bekleniyor…';
-      return;
-    }
-    if (overSince == null) {
-      timeEl.textContent = '00:00 / ' + fmt(duration);
-      statusEl.textContent = 'Hız sınırın altında';
-      return;
-    }
-    const elapsed = (Date.now() - overSince) / 1000;
-    timeEl.textContent = fmt(Math.min(elapsed, duration)) + ' / ' + fmt(duration);
-    if (elapsed >= duration) {
-      box.classList.add('alarm');
-      statusEl.textContent = 'Süre doldu! Yavaşla';
-      startAlarm();
-    } else {
-      box.classList.add('over');
-      statusEl.textContent = 'Hız sınırı aşıldı';
-    }
-  }
-
-  function update() {
-    const sp = currentSpeed();
-    if (tracking && sp != null && sp > limit) {
-      if (overSince == null) overSince = Date.now();
-    } else {
-      overSince = null; stopAlarm();
-    }
-    render();
-  }
-
-  async function keepAwake() {
-    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
-  }
-  document.addEventListener('visibilitychange', () => {
-    if (tracking && document.visibilityState === 'visible') keepAwake();
-  });
-
-  function start() {
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    } catch (e) {}
-
-    tracking = true; overSince = null;
-    toggle.textContent = 'Takibi durdur'; toggle.classList.add('on');
-    hint.textContent = 'Takip açık. Ekranı açık tut.';
-    keepAwake();
-
-    if (!testMode.checked) {
-      if (!('geolocation' in navigator)) {
-        hint.textContent = 'Bu cihaz konum desteklemiyor.';
-      } else {
-        watchId = navigator.geolocation.watchPosition(
-          pos => {
-            gpsSpeed = pos.coords.speed == null ? null : pos.coords.speed * 3.6;
-            update();
-          },
-          err => {
-            hint.textContent = err.code === 1
-              ? 'Konum izni reddedildi. Tarayıcı ayarlarından izin ver.'
-              : 'Konum alınamadı. Açık alanda tekrar dene.';
-          },
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-        );
-      }
-    }
-    tick = setInterval(update, 250);
-    update();
-  }
-
-  function stop() {
-    tracking = false; overSince = null; gpsSpeed = null;
-    if (watchId != null) navigator.geolocation.clearWatch(watchId);
-    watchId = null; clearInterval(tick); tick = null;
-    stopAlarm();
-    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
-    toggle.textContent = 'Takibi başlat'; toggle.classList.remove('on');
-    hint.textContent = 'Başlamak için düğmeye bas ve konum iznini ver.';
-    render();
-  }
-
-  toggle.addEventListener('click', () => tracking ? stop() : start());
-
-  slider.addEventListener('input', () => {
-    sliderVal.textContent = slider.value + ' km/sa';
-    update();
-  });
-  testMode.addEventListener('change', () => {
-    if (tracking) { stop(); start(); } else render();
-  });
-
-  render();
-})();
-</script>
-</body>
-</html>
+    if (navigator.vibra
