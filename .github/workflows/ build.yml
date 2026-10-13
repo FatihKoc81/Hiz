@@ -596,7 +596,7 @@ jobs:
           }
           EOF
       - name: Derle
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle curl -fsSL https://raw.githubusercontent.com/FatihKoc81/Hiz/main/MainActivity.kt -o app/src/main/java/com/hizuyari/MainActivity.kt &&  assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: hiz-uyari-apk
