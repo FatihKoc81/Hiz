@@ -11,8 +11,8 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.media.RingtoneManager
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -22,6 +22,10 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 class SpeedService : Service() {
 
@@ -31,8 +35,6 @@ class SpeedService : Service() {
         @Volatile var overSec = 0
         @Volatile var alarming = false
         @Volatile var gpsOk = false
-        @Volatile var testMode = false
-        @Volatile var testSpeed = 0f
         @Volatile var listener: (() -> Unit)? = null
         private const val CH = "takip"
     }
@@ -40,7 +42,7 @@ class SpeedService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var lm: LocationManager? = null
     private var wl: PowerManager.WakeLock? = null
-    private var player: MediaPlayer? = null
+    private var siren: AudioTrack? = null
     private var gpsSpeed = 0f
     private var lastFix = 0L
     private var overSince = -1L
@@ -65,7 +67,7 @@ class SpeedService : Service() {
             val now = SystemClock.elapsedRealtime()
 
             gpsOk = now - lastFix < 5000
-            val sp = if (testMode) testSpeed else if (gpsOk) gpsSpeed else 0f
+            val sp = if (gpsOk) gpsSpeed else 0f
             speedKmh = sp
 
             if (sp > limit) {
@@ -138,6 +140,42 @@ class SpeedService : Service() {
         }
     }
 
+    // Savaş sireni: 450-900 Hz arası yavaşça yükselip alçalan, kesintisiz döngüde çalan ses.
+    private fun buildSiren(attrs: AudioAttributes): AudioTrack {
+        val rate = 22050
+        val n = rate * 6
+        val buf = ShortArray(n)
+
+        fun freq(i: Int): Double = 450.0 + 450.0 * (0.5 - 0.5 * cos(2.0 * PI * i / n))
+
+        var cycles = 0.0
+        for (i in 0 until n) cycles += freq(i) / rate
+        val scale = cycles.roundToInt() / cycles
+
+        var phase = 0.0
+        for (i in 0 until n) {
+            phase += 2.0 * PI * freq(i) * scale / rate
+            val v = 0.62 * sin(phase) + 0.25 * sin(2 * phase) + 0.13 * sin(3 * phase)
+            buf[i] = (v * 30000).toInt().toShort()
+        }
+
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(attrs)
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(rate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(n * 2)
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .build()
+        track.write(buf, 0, n)
+        track.setLoopPoints(0, n, -1)
+        return track
+    }
+
     private fun startAlarm() {
         alarming = true
         val attrs = AudioAttributes.Builder()
@@ -145,15 +183,9 @@ class SpeedService : Service() {
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
         try {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val mp = MediaPlayer()
-            mp.setAudioAttributes(attrs)
-            mp.setDataSource(this, uri)
-            mp.isLooping = true
-            mp.prepare()
-            mp.start()
-            player = mp
+            val t = buildSiren(attrs)
+            t.play()
+            siren = t
         } catch (e: Exception) {
         }
         try {
@@ -167,11 +199,11 @@ class SpeedService : Service() {
     private fun stopAlarm() {
         alarming = false
         try {
-            player?.stop()
-            player?.release()
+            siren?.stop()
+            siren?.release()
         } catch (e: Exception) {
         }
-        player = null
+        siren = null
         try {
             getSystemService(Vibrator::class.java).cancel()
         } catch (e: Exception) {
