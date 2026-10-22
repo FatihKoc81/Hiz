@@ -244,7 +244,16 @@ class MainActivity : Activity() {
 
     }
 
+    private fun hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        val v = currentFocus ?: limitEt
+        imm.hideSoftInputFromWindow(v.windowToken, 0)
+        limitEt.clearFocus()
+        durEt.clearFocus()
+    }
+
     private fun save() {
+        hideKeyboard()
         val l = limitEt.text.toString().toIntOrNull()
         val d = durEt.text.toString().toIntOrNull()
         if (l == null || d == null || l !in 10..250 || d !in 1..600) {
