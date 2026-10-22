@@ -179,8 +179,9 @@ class MainActivity : Activity() {
         tb.gravity = Gravity.CENTER
         tb.setPadding(dp(16), dp(20), dp(16), dp(20))
         tb.background = timerBg
-        timeTv = label("00:00 / 00:45", 42f, Color.WHITE, true)
+        timeTv = label("00:00 / 00:45", 34f, Color.WHITE, true)
         timeTv.gravity = Gravity.CENTER
+        timeTv.isSingleLine = true
         statusTv = label("", 20f)
         statusTv.gravity = Gravity.CENTER
         tb.addView(timeTv, lp())
