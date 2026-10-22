@@ -5,21 +5,17 @@ import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 
@@ -47,9 +43,6 @@ class MainActivity : Activity() {
     private lateinit var btn: Button
     private lateinit var limitEt: EditText
     private lateinit var durEt: EditText
-    private lateinit var testCb: CheckBox
-    private lateinit var testBox: LinearLayout
-    private lateinit var testTv: TextView
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -208,41 +201,8 @@ class MainActivity : Activity() {
         saveBtn.setOnClickListener { save() }
         c2.addView(saveBtn, lp(dp(16)))
 
-        // Kart 3: test modu
-        val c3 = card()
-        root.addView(c3, lp(dp(16)))
-        testCb = CheckBox(this)
-        testCb.text = "Test modu"
-        testCb.textSize = 18f
-        testCb.setTextColor(cText)
-        testCb.buttonTintList = ColorStateList.valueOf(cBlueText)
-        c3.addView(testCb, lp())
-
-        testBox = LinearLayout(this)
-        testBox.orientation = LinearLayout.VERTICAL
-        testBox.visibility = View.GONE
-        testTv = label("Test hızı: 0 km/sa", 17f)
-        val sb = SeekBar(this)
-        sb.max = 200
-        sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
-                SpeedService.testSpeed = v.toFloat()
-                testTv.text = "Test hızı: $v km/sa"
-            }
-
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-        testBox.addView(testTv, lp(dp(8)))
-        testBox.addView(sb, lp(dp(8)))
-        c3.addView(testBox, lp())
-
-        testCb.setOnCheckedChangeListener { _, on ->
-            SpeedService.testMode = on
-            testBox.visibility = if (on) View.VISIBLE else View.GONE
-        }
-
     }
+
 
     private fun hideKeyboard() {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
@@ -295,7 +255,6 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        testCb.isChecked = SpeedService.testMode
         SpeedService.listener = { runOnUiThread { refresh() } }
         refresh()
     }
@@ -318,7 +277,7 @@ class MainActivity : Activity() {
             !on -> Pair(cTimer, "Takip kapalı")
             SpeedService.alarming -> Pair(cBad, "ALARM! Hızını düşür")
             SpeedService.speedKmh > limit -> Pair(cWarn, "Hız sınırın üstünde")
-            !SpeedService.testMode && !SpeedService.gpsOk -> Pair(cTimer, "GPS sinyali bekleniyor...")
+            !SpeedService.gpsOk -> Pair(cTimer, "GPS sinyali bekleniyor...")
             else -> Pair(cTimer, "Hız sınırın altında")
         }
         timerBg.setColor(bg)
