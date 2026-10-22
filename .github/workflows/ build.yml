@@ -28,11 +28,13 @@ jobs:
 
       - name: Proje dosyalarını oluştur
         run: |
-          test -f index.html || { echo "index.html ana dizinde yok"; exit 1; }
+          test -f MainActivity.kt || { echo "MainActivity.kt ana dizinde yok"; exit 1; }
+          test -f SpeedService.kt || { echo "SpeedService.kt ana dizinde yok"; exit 1; }
           test -f FK-ikon-512.png || { echo "FK-ikon-512.png ana dizinde yok"; exit 1; }
-          mkdir -p app/src/main/assets app/src/main/java/com/fatih/hizasimi
+          mkdir -p app/src/main/java/com/hizuyari
 
-          cp index.html app/src/main/assets/index.html
+          cp MainActivity.kt app/src/main/java/com/hizuyari/MainActivity.kt
+          cp SpeedService.kt app/src/main/java/com/hizuyari/SpeedService.kt
 
           # Logo: her ekran yoğunluğu için ayrı boyut
           for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
@@ -68,6 +70,7 @@ jobs:
           cat > build.gradle <<'EOT'
           plugins {
               id 'com.android.application' version '8.5.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
           }
           EOT
 
@@ -79,24 +82,25 @@ jobs:
           cat > app/build.gradle <<'EOT'
           plugins {
               id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
           }
           android {
-              namespace 'com.fatih.hizasimi'
+              namespace 'com.hizuyari'
               compileSdk 34
               defaultConfig {
                   applicationId 'com.fatih.hizasimi'
-                  minSdk 24
+                  minSdk 26
                   targetSdk 34
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 21
+                  versionName '2.1'
               }
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
-          }
-          dependencies {
-              implementation 'androidx.webkit:webkit:1.11.0'
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
           }
           EOT
 
@@ -105,8 +109,10 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
               <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
               <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
               <application
                   android:icon="@mipmap/ic_launcher"
                   android:roundIcon="@mipmap/ic_launcher_round"
@@ -122,80 +128,12 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
+                  <service
+                      android:name=".SpeedService"
+                      android:exported="false"
+                      android:foregroundServiceType="location" />
               </application>
           </manifest>
-          EOT
-
-          cat > app/src/main/java/com/fatih/hizasimi/MainActivity.java <<'EOT'
-          package com.fatih.hizasimi;
-
-          import android.Manifest;
-          import android.app.Activity;
-          import android.content.pm.PackageManager;
-          import android.graphics.Color;
-          import android.os.Bundle;
-          import android.view.WindowManager;
-          import android.webkit.GeolocationPermissions;
-          import android.webkit.WebChromeClient;
-          import android.webkit.WebResourceRequest;
-          import android.webkit.WebResourceResponse;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-          import androidx.webkit.WebViewAssetLoader;
-
-          public class MainActivity extends Activity {
-              private static final String APP_URL =
-                  "https://appassets.androidplatform.net/assets/index.html";
-              private WebView web;
-
-              private boolean hasLocation() {
-                  return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
-                      == PackageManager.PERMISSION_GRANTED;
-              }
-
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-                  web = new WebView(this);
-                  web.setBackgroundColor(Color.parseColor("#050A24"));
-                  setContentView(web);
-
-                  final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
-                      .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
-                      .build();
-
-                  WebSettings s = web.getSettings();
-                  s.setJavaScriptEnabled(true);
-                  s.setDomStorageEnabled(true);
-                  s.setGeolocationEnabled(true);
-                  s.setMediaPlaybackRequiresUserGesture(false);
-
-                  web.setWebViewClient(new WebViewClient() {
-                      @Override
-                      public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
-                          return loader.shouldInterceptRequest(r.getUrl());
-                      }
-                  });
-
-                  web.setWebChromeClient(new WebChromeClient() {
-                      @Override
-                      public void onGeolocationPermissionsShowPrompt(
-                              String origin, GeolocationPermissions.Callback callback) {
-                          callback.invoke(origin, hasLocation(), false);
-                      }
-                  });
-
-                  if (!hasLocation()) {
-                      requestPermissions(new String[]{
-                          Manifest.permission.ACCESS_FINE_LOCATION,
-                          Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
-                  }
-                  web.loadUrl(APP_URL);
-              }
-          }
           EOT
 
       - name: APK derle
