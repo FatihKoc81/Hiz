@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050a24">
-<title>Hız Aşımı Sayacı</title>
+<title>Hızölçer</title>
 <link rel="icon" type="image/png" href="FK-ikon-512.png?v=1">
 <link rel="apple-touch-icon" href="FK-ikon-512.png?v=1">
 <script>
@@ -98,7 +98,7 @@ window.addEventListener("error", function (e) {
 </head>
 <body>
 
-<h1>Hız Aşımı Sayacı</h1>
+<h1>Hızölçer</h1>
 
 <section class="card">
   <div class="center label">Anlık GPS hızı</div>
@@ -130,7 +130,7 @@ window.addEventListener("error", function (e) {
   </div>
 </details>
 
-<div id="ver">v20 · JS çalışmıyor</div>
+<div id="ver">v21 · JS çalışmıyor</div>
 
 <script>
 (() => {
@@ -140,7 +140,7 @@ window.addEventListener("error", function (e) {
   const limitIn = $('limit'), durIn = $('dur');
   const testMode = $('testMode'), slider = $('slider'), sliderVal = $('sliderVal');
 
-  $('ver').textContent = 'v20 · hazır';
+  $('ver').textContent = 'v21 · hazır';
 
   let limit = 90, duration = 45;
   let tracking = false, watchId = null, tick = null, wakeLock = null;
@@ -166,7 +166,13 @@ window.addEventListener("error", function (e) {
   });
 
   const fmt = s => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0');
-  const currentSpeed = () => testMode.checked ? Number(slider.value) : gpsSpeed;
+
+  // Ekranda gösterilen (yuvarlanmış) hız. Sayaç kararı da bunu kullanır,
+  // böylece ekranda 90 yazarken sayaç başlamaz; 91 görünce başlar.
+  const currentSpeed = () => {
+    const raw = testMode.checked ? Number(slider.value) : gpsSpeed;
+    return raw == null ? null : Math.round(raw);
+  };
 
   function beepOnce() {
     if (!audioCtx) return;
@@ -192,7 +198,7 @@ window.addEventListener("error", function (e) {
 
   function render() {
     const sp = currentSpeed();
-    speedEl.textContent = sp == null ? '--' : Math.round(sp);
+    speedEl.textContent = sp == null ? '--' : sp;
     box.className = 'timer center';
 
     if (!tracking) {
