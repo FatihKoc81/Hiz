@@ -1,0 +1,157 @@
+name: APK derle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu al
+        uses: actions/checkout@v4
+
+      - name: Java kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Proje dosyalarını oluştur
+        run: |
+          test -f MainActivity.kt || { echo "MainActivity.kt ana dizinde yok"; exit 1; }
+          test -f SpeedService.kt || { echo "SpeedService.kt ana dizinde yok"; exit 1; }
+          test -f FK-ikon-512.png || { echo "FK-ikon-512.png ana dizinde yok"; exit 1; }
+          mkdir -p app/src/main/java/com/hizuyari
+
+          cp MainActivity.kt app/src/main/java/com/hizuyari/MainActivity.kt
+          cp SpeedService.kt app/src/main/java/com/hizuyari/SpeedService.kt
+
+          # Logo: her ekran yoğunluğu için ayrı boyut
+          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            name="${d%%:*}"; size="${d##*:}"
+            mkdir -p "app/src/main/res/mipmap-$name"
+            if command -v convert >/dev/null 2>&1; then
+              convert FK-ikon-512.png -resize "${size}x${size}" "app/src/main/res/mipmap-$name/ic_launcher.png"
+            else
+              cp FK-ikon-512.png "app/src/main/res/mipmap-$name/ic_launcher.png"
+            fi
+            cp "app/src/main/res/mipmap-$name/ic_launcher.png" "app/src/main/res/mipmap-$name/ic_launcher_round.png"
+          done
+
+          cat > settings.gradle <<'EOT'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "HizAsimi"
+          include ':app'
+          EOT
+
+          cat > build.gradle <<'EOT'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+          }
+          EOT
+
+          cat > gradle.properties <<'EOT'
+          org.gradle.jvmargs=-Xmx2g
+          android.useAndroidX=true
+          EOT
+
+          cat > app/build.gradle <<'EOT'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+          android {
+              namespace 'com.hizuyari'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.fatih.hizasimi'
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 21
+                  versionName '2.1'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+          EOT
+
+          cat > app/src/main/AndroidManifest.xml <<'EOT'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <application
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:label="Hızölçer"
+                  android:allowBackup="true"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <service
+                      android:name=".SpeedService"
+                      android:exported="false"
+                      android:foregroundServiceType="location" />
+              </application>
+          </manifest>
+          EOT
+
+      - name: APK derle
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: APK adını düzenle
+        run: cp app/build/outputs/apk/debug/app-debug.apk hiz-asimi.apk
+
+      - name: APK'yi yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiz-asimi-apk
+          path: hiz-asimi.apk
+
+      - name: Releases sayfasına ekle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "apk-${{ github.run_number }}" hiz-asimi.apk \
+            --title "APK #${{ github.run_number }}" \
+            --notes "Otomatik derleme"
