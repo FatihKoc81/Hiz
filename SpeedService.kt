@@ -67,8 +67,9 @@ class SpeedService : Service() {
             val now = SystemClock.elapsedRealtime()
 
             gpsOk = now - lastFix < 5000
-            val sp = if (gpsOk) gpsSpeed else 0f
-            speedKmh = sp
+            // Ekranda görünen tam sayı hız esas alınır: sınır 90 ise sayaç 91'de başlar
+            val sp = if (gpsOk) gpsSpeed.roundToInt() else 0
+            speedKmh = sp.toFloat()
 
             if (sp > limit) {
                 if (overSince < 0) overSince = now
