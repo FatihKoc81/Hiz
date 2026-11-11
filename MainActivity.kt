@@ -270,13 +270,16 @@ class MainActivity : Activity() {
         val limit = p.getInt("limit", 90)
         val dur = p.getInt("dur", 45)
 
-        speedTv.text = if (on) SpeedService.speedKmh.toInt().toString() else "0"
-        timeTv.text = "${fmt(SpeedService.overSec)} / ${fmt(dur)}"
+        val shown = if (on) SpeedService.speedKmh.toInt() else 0
+        // Sayaç sadece ekrandaki hız, kayıtlı limitten BÜYÜKSE işler (86 = 86 ise başlamaz)
+        val isOver = on && shown > limit
+        speedTv.text = shown.toString()
+        timeTv.text = "${fmt(if (isOver) SpeedService.overSec else 0)} / ${fmt(dur)}"
 
         val (bg, msg) = when {
             !on -> Pair(cTimer, "Takip kapalı")
-            SpeedService.alarming -> Pair(cBad, "ALARM! Hızını düşür")
-            SpeedService.speedKmh > limit -> Pair(cWarn, "Hız sınırın üstünde")
+            SpeedService.alarming && isOver -> Pair(cBad, "ALARM! Hızını düşür")
+            isOver -> Pair(cWarn, "Hız sınırın üstünde")
             !SpeedService.gpsOk -> Pair(cTimer, "GPS sinyali bekleniyor...")
             else -> Pair(cTimer, "Hız sınırın altında")
         }

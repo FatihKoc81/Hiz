@@ -71,6 +71,7 @@ class SpeedService : Service() {
             val sp = if (gpsOk) gpsSpeed.roundToInt() else 0
             speedKmh = sp.toFloat()
 
+            // Katı karşılaştırma: sayaç ancak ekrandaki hız limitten BÜYÜK olunca başlar (eşitlikte başlamaz)
             if (sp > limit) {
                 if (overSince < 0) overSince = now
                 overSec = ((now - overSince) / 1000).toInt()
