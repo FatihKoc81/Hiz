@@ -2,6 +2,20 @@ package com.hizuyari
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -148,6 +162,7 @@ class MainActivity : Activity() {
         badge.letterSpacing = 0.08f
         badge.setPadding(dp(14), dp(6), dp(14), dp(6))
         badge.background = shape(cPanel, dp(12), cGold)
+        badge.setOnClickListener { checkUpdate() }
         head.addView(
             badge,
             LinearLayout.LayoutParams(
@@ -262,6 +277,98 @@ class MainActivity : Activity() {
     override fun onPause() {
         SpeedService.listener = null
         super.onPause()
+    }
+
+    // ---- Güncelleme (FK'ya basınca) ----
+    private val repo = "FatihKoc81/Hiz"
+    private var dlReceiver: BroadcastReceiver? = null
+
+    @Suppress("DEPRECATION")
+    private fun currentCode(): Int {
+        val i = packageManager.getPackageInfo(packageName, 0)
+        return if (Build.VERSION.SDK_INT >= 28) i.longVersionCode.toInt() else i.versionCode
+    }
+
+    private fun checkUpdate() {
+        Toast.makeText(this, "Güncelleme aranıyor...", Toast.LENGTH_SHORT).show()
+        thread {
+            try {
+                val c = URL("https://api.github.com/repos/$repo/releases/latest")
+                    .openConnection() as HttpURLConnection
+                c.connectTimeout = 8000
+                c.readTimeout = 8000
+                c.setRequestProperty("Accept", "application/vnd.github+json")
+                val tag = JSONObject(c.inputStream.bufferedReader().readText()).getString("tag_name")
+                val n = tag.filter { it.isDigit() }.toIntOrNull() ?: throw Exception("tag")
+                val latest = 1000 + n
+                runOnUiThread {
+                    if (latest > currentCode()) askUpdate()
+                    else Toast.makeText(this, "Uygulama güncel", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "Güncelleme kontrol edilemedi (internet?)", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun askUpdate() {
+        AlertDialog.Builder(this)
+            .setTitle("Yeni sürüm var")
+            .setMessage("Güncelleme indirilsin ve kurulsun mu?")
+            .setPositiveButton("Güncelle") { _, _ -> downloadUpdate() }
+            .setNegativeButton("Vazgeç", null)
+            .show()
+    }
+
+    private fun downloadUpdate() {
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(this, "Bu uygulamaya kurulum izni ver, sonra FK'ya tekrar bas", Toast.LENGTH_LONG).show()
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+            )
+            return
+        }
+        val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+        File(dir, "hiz-asimi.apk").delete()
+
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val req = DownloadManager.Request(
+            Uri.parse("https://github.com/$repo/releases/latest/download/hiz-asimi.apk")
+        )
+            .setTitle("Hız Aşımı Sayacı güncellemesi")
+            .setMimeType("application/vnd.android.package-archive")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "hiz-asimi.apk")
+        val id = dm.enqueue(req)
+        Toast.makeText(this, "İndiriliyor...", Toast.LENGTH_LONG).show()
+
+        dlReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                if (intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != id) return
+                val uri = dm.getUriForDownloadedFile(id)
+                if (uri == null) {
+                    Toast.makeText(ctx, "İndirme başarısız", Toast.LENGTH_LONG).show()
+                    return
+                }
+                val i = Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(i)
+            }
+        }
+        dlReceiver = r
+        val f = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED)
+        else registerReceiver(r, f)
+    }
+
+    override fun onDestroy() {
+        dlReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
+        dlReceiver = null
+        super.onDestroy()
     }
 
     private fun refresh() {
