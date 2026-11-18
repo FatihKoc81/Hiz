@@ -27,13 +27,18 @@ jobs:
           gradle-version: '8.7'
 
       - name: Proje dosyalarını oluştur
+        env:
+          HIZ_KEYSTORE_BASE64: ${{ secrets.HIZ_KEYSTORE_BASE64 }}
+          HIZ_KEYSTORE_PASSWORD: ${{ secrets.HIZ_KEYSTORE_PASSWORD }}
+          HIZ_KEY_ALIAS: ${{ secrets.HIZ_KEY_ALIAS }}
+          HIZ_KEY_PASSWORD: ${{ secrets.HIZ_KEY_PASSWORD }}
         run: |
           test -f MainActivity.kt || { echo "MainActivity.kt ana dizinde yok"; exit 1; }
           test -f SpeedService.kt || { echo "SpeedService.kt ana dizinde yok"; exit 1; }
           test -f FK-ikon-512.png || { echo "FK-ikon-512.png ana dizinde yok"; exit 1; }
           mkdir -p app/src/main/java/com/hizuyari
-          test -f hiz-keystore.b64 || { echo "hiz-keystore.b64 ana dizinde yok"; exit 1; }
-          base64 -d hiz-keystore.b64 > app/hiz.keystore
+          test -n "$HIZ_KEYSTORE_BASE64" || { echo "HIZ_KEYSTORE_BASE64 GitHub Secret eksik"; exit 1; }
+          printf '%s' "$HIZ_KEYSTORE_BASE64" | base64 -d > app/hiz.keystore
           VC=$((1000 + GITHUB_RUN_NUMBER))
 
           cp MainActivity.kt app/src/main/java/com/hizuyari/MainActivity.kt
@@ -100,9 +105,9 @@ jobs:
               signingConfigs {
                   hiz {
                       storeFile file('hiz.keystore')
-                      storePassword 'hizsayac123'
-                      keyAlias 'hiz'
-                      keyPassword 'hizsayac123'
+                      storePassword System.getenv("HIZ_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("HIZ_KEY_ALIAS") ?: "hiz"
+                      keyPassword System.getenv("HIZ_KEY_PASSWORD")
                   }
               }
               buildTypes {
