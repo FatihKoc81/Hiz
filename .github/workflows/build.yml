@@ -103,9 +103,9 @@ jobs:
               signingConfigs {
                   hiz {
                       storeFile file('hiz.keystore')
-                      storePassword System.getenv("HIZ_KEYSTORE_PASSWORD")
+                      storePassword providers.environmentVariable('HIZ_KEYSTORE_PASSWORD').getOrElse('')
                       keyAlias 'hiz'
-                      keyPassword System.getenv("HIZ_KEYSTORE_PASSWORD")
+                      keyPassword providers.environmentVariable('HIZ_KEYSTORE_PASSWORD').getOrElse('')
                   }
               }
               buildTypes {
