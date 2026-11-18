@@ -158,6 +158,8 @@ jobs:
           EOT
 
       - name: APK derle
+        env:
+          HIZ_KEYSTORE_PASSWORD: ${{ secrets.HIZ_KEYSTORE_PASSWORD }}
         run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: APK adını düzenle
