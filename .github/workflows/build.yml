@@ -30,8 +30,6 @@ jobs:
         env:
           HIZ_KEYSTORE_BASE64: ${{ secrets.HIZ_KEYSTORE_BASE64 }}
           HIZ_KEYSTORE_PASSWORD: ${{ secrets.HIZ_KEYSTORE_PASSWORD }}
-          HIZ_KEY_ALIAS: ${{ secrets.HIZ_KEY_ALIAS }}
-          HIZ_KEY_PASSWORD: ${{ secrets.HIZ_KEY_PASSWORD }}
         run: |
           test -f MainActivity.kt || { echo "MainActivity.kt ana dizinde yok"; exit 1; }
           test -f SpeedService.kt || { echo "SpeedService.kt ana dizinde yok"; exit 1; }
@@ -106,8 +104,8 @@ jobs:
                   hiz {
                       storeFile file('hiz.keystore')
                       storePassword System.getenv("HIZ_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("HIZ_KEY_ALIAS") ?: "hiz"
-                      keyPassword System.getenv("HIZ_KEY_PASSWORD")
+                      keyAlias 'hiz'
+                      keyPassword System.getenv("HIZ_KEYSTORE_PASSWORD")
                   }
               }
               buildTypes {
